@@ -398,6 +398,18 @@ struct SectionEditorView: View {
         }
     }
 
+    /// Evenly spaced tile times, rounded to a tenth of a second.
+    static func stripTimes(count: Int, duration: Double) -> [Double] {
+        let step: Double = duration / Double(count)
+        var out: [Double] = []
+        out.reserveCapacity(count)
+        for i in 0..<count {
+            let t: Double = (Double(i) + 0.5) * step
+            out.append((t * 10).rounded() / 10)
+        }
+        return out
+    }
+
     /// YouTube storyboard sprites: low-res frames for the whole video in one or two requests.
     private func loadStoryboard(url: String, api: API) async {
         let r: StoryboardResult? = try? await api.call("storyboard", ["url": url])
@@ -418,7 +430,7 @@ struct SectionEditorView: View {
             if Task.isCancelled { return }
         }
         let count = max(6, min(80, Int(width / 92)))
-        let times = (0..<count).map { ((Double($0) + 0.5) * duration / Double(count) * 10).rounded() / 10 }
+        let times = Self.stripTimes(count: count, duration: duration)
         if let sb = storyboard, strip.count != count {
             var quick: [Double: NSImage] = [:]
             for t in times { if let img = sb.frame(at: t, large: false) { quick[t] = img } }
