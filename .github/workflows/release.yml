@@ -53,8 +53,32 @@ jobs:
           tools/ffmpeg -hide_banner -encoders | grep -E 'h264_videotoolbox|hevc_videotoolbox|prores_videotoolbox'
           tools/deno --version | head -1
           otool -L tools/ffmpeg | grep -v -E '/usr/lib|/System' || true
+      - name: Signing certificate
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          # A stable signature keeps macOS privacy permissions (Full Disk Access)
+          # across updates; ad-hoc signatures change with every build.
+          KC="$RUNNER_TEMP/signing.keychain-db"; KP=$(openssl rand -hex 16)
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          echo "$MAC_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          ID=$(security find-certificate -c "Dwn Code Signing" -Z "$KC" | awk '/SHA-1/{print $NF}')
+          echo "Signing identity: $ID"
+          echo "DWN_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "DWN_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build
         run: DWN_TOOLS="$PWD/tools" ./build.sh --release
+      - name: Check the signature
+        run: |
+          codesign -dr - dist/Dwn.app 2>&1 | tee /dev/stderr | grep -q 'certificate leaf' \
+            || { echo "Dwn.app is not signed with the Dwn certificate"; exit 1; }
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -39,7 +39,13 @@ cp $ROOT/app/Info.plist $APP/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" $APP/Contents/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" $APP/Contents/Info.plist
 [[ -f $ROOT/app/AppIcon.icns ]] && cp $ROOT/app/AppIcon.icns $APP/Contents/Resources/
-codesign --force --deep --sign - $APP >/dev/null
+# Release builds sign with a stable certificate ($DWN_SIGN_IDENTITY, a SHA-1 or
+# name) so macOS keeps privacy permissions like Full Disk Access across
+# updates. Local builds fall back to an ad-hoc signature.
+SIGN_ARGS=(--force --deep --sign "${DWN_SIGN_IDENTITY:--}")
+[[ -n "${DWN_SIGN_KEYCHAIN:-}" ]] && SIGN_ARGS+=(--keychain "$DWN_SIGN_KEYCHAIN")
+codesign "${SIGN_ARGS[@]}" $APP
+codesign --verify --deep $APP
 echo "Built $APP"
 
 for arg in "$@"; do
