@@ -94,7 +94,19 @@ struct SignInPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label(r.message ?? "Couldn't read that browser's login.", systemImage: "exclamationmark.triangle.fill")
                     .font(.ui(12.5, .medium)).foregroundStyle(Theme.warn)
-                Button("Try again") { Task { await check(b) } }.buttonStyle(QuietButtonStyle(height: 32))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    if r.reason == "permission" {
+                        Button("Open Full Disk Access settings") { FullDiskAccess.open() }
+                            .buttonStyle(QuietButtonStyle(height: 32))
+                    }
+                    Button("Try again") { Task { await check(b) } }.buttonStyle(QuietButtonStyle(height: 32))
+                }
+                if r.reason == "permission" {
+                    Text("Turn on Dwn in the list (use + to add it from Applications if it isn't there), then come back and try again.")
+                        .font(.ui(11.5)).foregroundStyle(Theme.text3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
@@ -149,5 +161,11 @@ struct SignInSheet: View {
         .padding(24)
         .frame(width: 480)
         .background(Theme.sidebar)
+    }
+}
+
+enum FullDiskAccess {
+    static func open() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
     }
 }

@@ -176,6 +176,9 @@ struct JobCard: View {
                     if job.errorCode == "signin" {
                         Button("Sign in") { model.showSignIn = true }.buttonStyle(QuietButtonStyle(height: 30))
                     }
+                    if job.errorCode == "permission" {
+                        Button("Allow access") { FullDiskAccess.open() }.buttonStyle(QuietButtonStyle(height: 30))
+                    }
                     Button { model.retry(job) } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(IconButtonStyle(size: 30)).help("Try again")
                     Button { model.dismiss(job) } label: { Image(systemName: "xmark") }

@@ -410,6 +410,8 @@ def run_job(job: Job):
 
 def error_code(msg: str) -> str | None:
     low = msg.lower()
+    if "cookies database" in low and browser_blocked(prefs.get("browser_cookies") or ""):
+        return "permission"
     if "sign in to confirm" in low or "not a bot" in low or "login required" in low or "age-restricted" in low:
         return "signin"
     if "is live" in low or "live event" in low:
@@ -433,6 +435,9 @@ def cleanup_partial(job: "Job"):
 def friendly_error(msg: str) -> str:
     msg = re.sub(r"\x1b\[[0-9;]*m", "", msg).replace("ERROR: ", "")
     low = msg.lower()
+    b = prefs.get("browser_cookies") or ""
+    if b and "cookies database" in low and browser_blocked(b):
+        return PERMISSION_MSG.format(name=b.title())
     if "private video" in low:
         return "This video is private."
     if "sign in to confirm" in low or "not a bot" in low:
@@ -884,10 +889,39 @@ def frames(url: str, times: list[float], width: int) -> dict:
 
 # --------------------------------------------------------------------------- sign-in
 
+BROWSER_DIRS_MAC = {
+    "chrome": "~/Library/Application Support/Google/Chrome",
+    "brave": "~/Library/Application Support/BraveSoftware/Brave-Browser",
+    "edge": "~/Library/Application Support/Microsoft Edge",
+    "firefox": "~/Library/Application Support/Firefox",
+}
+
+
+def browser_blocked(browser: str) -> bool:
+    """True when the browser's data folder exists but macOS won't let Dwn read
+    it. yt-dlp reports that as "could not find", which is misleading."""
+    if not IS_MAC:
+        return False
+    d = os.path.expanduser(BROWSER_DIRS_MAC.get(browser, ""))
+    if not d or not os.path.isdir(d):
+        return False
+    try:
+        os.listdir(d)
+        return False
+    except PermissionError:
+        return True
+
+
+PERMISSION_MSG = ("macOS is blocking Dwn from reading {name}'s data. Give Dwn Full Disk Access in "
+                  "System Settings > Privacy & Security, then try again.")
+
+
 def test_browser_login(browser: str) -> dict:
     """Read the browser's cookies (macOS may ask for the Keychain password)
     and report whether it holds a YouTube login."""
     from yt_dlp.cookies import extract_cookies_from_browser
+    if browser_blocked(browser):
+        return {"ok": False, "reason": "permission", "message": PERMISSION_MSG.format(name=browser.title())}
     try:
         jar = extract_cookies_from_browser(browser)
     except Exception as e:  # noqa: BLE001
@@ -898,8 +932,8 @@ def test_browser_login(browser: str) -> dict:
         if "keychain" in msg.lower() or "password" in msg.lower():
             return {"ok": False, "reason": "keychain",
                     "message": "Your Mac didn't allow it. Try again, and choose Always Allow."}
-        if "operation not permitted" in msg.lower():
-            return {"ok": False, "reason": "permission", "message": "macOS blocked access to that browser."}
+        if "operation not permitted" in msg.lower() or browser_blocked(browser):
+            return {"ok": False, "reason": "permission", "message": PERMISSION_MSG.format(name=browser.title())}
         if "could not copy" in msg.lower() or "being used by another process" in msg.lower():
             return {"ok": False, "reason": "locked",
                     "message": f"Close {browser.title()} completely, then try again."}
