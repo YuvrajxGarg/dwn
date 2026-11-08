@@ -1,0 +1,160 @@
+/* Dwn design system — matches the macOS app: near-black surfaces, fill-only
+   controls, white primary actions, one lime accent. */
+:root {
+  --bg: #0b0b0c;
+  --sidebar: #101012;
+  --card: #17171a;
+  --raised: #212125;
+  --fill: rgba(255,255,255,.055);
+  --fill-hover: rgba(255,255,255,.085);
+  --fill-on: rgba(255,255,255,.12);
+  --stroke: rgba(255,255,255,.075);
+  --stroke-strong: rgba(255,255,255,.14);
+  --text: rgba(255,255,255,.94);
+  --text2: rgba(255,255,255,.56);
+  --text3: rgba(255,255,255,.34);
+  --accent: #ccff4d;
+  --warn: #ffb359;
+  --danger: #ff6b66;
+  --r: 10px;
+  --control: 36px;
+  --control-lg: 42px;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "SF Pro Text", sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font: 13px/1.35 var(--font);
+  -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden; }
+input, textarea, button, select { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: default; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+.hidden { display: none !important; }
+.mono { font-variant-numeric: tabular-nums; }
+.drag { -webkit-app-region: drag; }
+.nodrag { -webkit-app-region: no-drag; }
+svg { display: block; }
+.i { width: 14px; height: 14px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.i.sm { width: 12px; height: 12px; }
+.i.lg { width: 18px; height: 18px; }
+
+/* ---------- wordmark ---------- */
+.wordmark { display: inline-flex; align-items: flex-end; gap: .06em; font: 900 var(--size, 40px)/.8 var(--font-display);
+  letter-spacing: -.055em; color: var(--text); }
+.wordmark .arrow { width: .36em; height: .56em; fill: var(--accent); margin-bottom: .02em; }
+.wordmark.muted, .wordmark.muted .arrow { color: var(--text3); fill: var(--text3); }
+
+/* ---------- surfaces ---------- */
+.card { background: var(--card); border: 1px solid var(--stroke); border-radius: 16px; }
+.fill { background: var(--fill); border-radius: var(--r); }
+.label { font-size: 11.5px; font-weight: 600; color: var(--text3); }
+.muted { color: var(--text2); }
+.faint { color: var(--text3); }
+
+/* ---------- buttons ---------- */
+.btn-primary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  height: var(--control-lg); border-radius: var(--r); background: rgba(255,255,255,.95); color: #000;
+  font-weight: 600; font-size: 13.5px; transition: transform .1s, background .12s; }
+.btn-primary:hover { background: #fff; }
+.btn-primary:active { transform: scale(.985); background: rgba(255,255,255,.8); }
+.btn-primary:disabled { background: var(--fill); color: var(--text3); }
+.btn-primary .i { stroke-width: 2.4; }
+.btn-quiet { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: var(--control);
+  padding: 0 12px; border-radius: var(--r); background: var(--fill); color: var(--text); font-weight: 500; font-size: 12.5px;
+  transition: background .12s; white-space: nowrap; }
+.btn-quiet:hover { background: var(--fill-hover); }
+.btn-quiet:active { background: var(--fill-on); }
+.btn-quiet:disabled { color: var(--text3); }
+.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: 8px; color: var(--text2); transition: background .12s, color .12s; flex: none; }
+.btn-icon:hover { background: var(--fill-hover); color: var(--text); }
+.btn-icon.filled { background: var(--fill); }
+.btn-icon.lg { width: 32px; height: 32px; }
+.btn-link { color: var(--text2); font-weight: 500; font-size: 12.5px; }
+.btn-link:hover { color: var(--text); }
+
+/* ---------- text field ---------- */
+.field { display: flex; align-items: center; gap: 8px; height: var(--control-lg); padding: 0 4px 0 12px;
+  background: var(--fill); border-radius: var(--r); box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .15s; }
+.field:focus-within { box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+.field input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; font-size: 13.5px; font-weight: 500; user-select: text; }
+.field input::placeholder { color: var(--text3); }
+.field > .i { color: var(--text3); }
+.textarea { width: 100%; background: var(--card); border: 1px solid var(--stroke); border-radius: 12px; padding: 10px 12px;
+  outline: 0; resize: none; font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; user-select: text; }
+
+/* ---------- tabs ---------- */
+.tabs { display: flex; gap: 2px; padding: 3px; background: rgba(255,255,255,.045); border-radius: var(--r); position: relative; }
+.tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: calc(var(--h, 36px) - 6px);
+  border-radius: 8px; color: var(--text3); font-weight: 600; font-size: 12.5px; position: relative; z-index: 1; transition: color .15s; }
+.tabs button.on { color: var(--text); }
+.tabs .pill { position: absolute; top: 3px; bottom: 3px; border-radius: 8px; background: rgba(255,255,255,.11);
+  box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .28s cubic-bezier(.3,.9,.3,1), width .28s cubic-bezier(.3,.9,.3,1); }
+
+/* ---------- select (dropdown) ---------- */
+.select { position: relative; display: flex; align-items: center; gap: 8px; height: var(--h, 36px); padding: 0 12px;
+  background: var(--fill); border-radius: var(--r); transition: background .12s; }
+.select:hover { background: var(--fill-hover); }
+.select select { position: absolute; inset: 0; opacity: 0; width: 100%; }
+.select .value { font-weight: 500; flex: 1; }
+.select .detail { color: var(--text3); font-size: 12px; }
+.select > .i { color: var(--text3); }
+select option { background: #1d1d20; color: #eee; }
+
+/* ---------- switch / option rows ---------- */
+.switch { width: 34px; height: 20px; border-radius: 10px; background: rgba(255,255,255,.1); position: relative; flex: none; transition: background .2s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(255,255,255,.55); transition: transform .26s cubic-bezier(.3,.9,.3,1), background .2s; }
+.switch.on { background: rgba(255,255,255,.95); }
+.switch.on::after { transform: translateX(14px); background: #000; }
+.option { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; }
+.option .i { color: var(--text3); width: 16px; }
+.option .t { flex: 1; font-weight: 500; }
+.option .d { display: block; font-size: 11.5px; color: var(--text3); font-weight: 400; }
+
+.tiles { display: flex; gap: 6px; }
+.tile { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 46px;
+  border-radius: var(--r); background: var(--fill); color: var(--text2); font-size: 10.5px; font-weight: 600; transition: background .12s, color .12s; }
+.tile:hover { background: var(--fill-hover); color: var(--text); }
+.tile.on { background: rgba(255,255,255,.92); color: #000; }
+
+/* ---------- progress / shimmer ---------- */
+.progress { height: 4px; border-radius: 4px; background: var(--raised); overflow: hidden; position: relative; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 4px; transition: width .35s ease-out; min-width: 6px; }
+.progress.indet > div { width: 40% !important; opacity: .45; animation: indet 1.3s linear infinite; }
+@keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.shimmer { background: rgba(255,255,255,.06); position: relative; overflow: hidden; }
+.shimmer::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent);
+  animation: shimmer 1.3s linear infinite; }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* ---------- thumbnails ---------- */
+.thumb { position: relative; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,.06); flex: none; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity .15s; }
+.thumb img.loaded { opacity: 1; }
+.thumb .dur { position: absolute; right: 3px; bottom: 3px; font-size: 10px; font-weight: 600; color: #fff;
+  background: rgba(0,0,0,.7); border-radius: 4px; padding: 0 4px; }
+
+/* ---------- toasts ---------- */
+#toasts { position: fixed; left: 0; right: 0; bottom: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 100; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; background: var(--raised);
+  border: 1px solid var(--stroke-strong); box-shadow: 0 6px 24px rgba(0,0,0,.4); font-weight: 500; max-width: 560px; animation: up .25s ease-out; }
+.toast .i { color: var(--accent); }
+.toast.err .i { color: var(--warn); }
+@keyframes up { from { transform: translateY(10px); opacity: 0; } }
+
+/* ---------- modal ---------- */
+.modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 50; animation: fade .15s; }
+.modal { background: var(--sidebar); border: 1px solid var(--stroke-strong); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  max-height: calc(100vh - 40px); overflow: auto; animation: pop .2s cubic-bezier(.3,.9,.3,1); }
+.modal h2 { font: 700 19px var(--font-display); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { transform: scale(.97); opacity: 0; } }
+
+/* ---------- menu (context) ---------- */
+.menu { position: fixed; z-index: 120; min-width: 190px; padding: 5px; background: #1c1c1f; border: 1px solid var(--stroke-strong);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.menu button { display: block; width: 100%; text-align: left; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; }
+.menu button:hover { background: rgba(255,255,255,.08); }
+.menu hr { border: 0; border-top: 1px solid var(--stroke); margin: 4px 2px; }
+.menu .danger { color: var(--danger); }

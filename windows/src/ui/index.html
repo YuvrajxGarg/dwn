@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: https: data:; media-src https: file: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Dwn</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="splash">
+    <div class="glow"></div>
+    <div class="splash-mark">
+      <span class="wordmark" style="--size:68px"><span class="l">d</span><span class="l">w</span><span class="l">n</span><svg class="arrow drop" viewBox="0 0 36 56"><path d="M11.9 25.8V6.1A6.1 6.1 0 0 1 24.1 6.1V25.8H36L18 56 0 25.8Z"/></svg></span>
+    </div>
+    <div class="splash-line"><div></div></div>
+    <div class="splash-status">Starting the engine</div>
+    <div class="splash-fail hidden"></div>
+  </div>
+  <div id="welcome" class="hidden"></div>
+  <div id="app" class="hidden">
+    <aside id="sidebar">
+      <div class="side-scroll">
+        <div id="composer" class="card composer"></div>
+        <button id="bulk-card" class="card bulk-card"></button>
+      </div>
+      <footer id="footer"></footer>
+    </aside>
+    <main id="content">
+      <div class="topbar drag">
+        <label class="search nodrag" id="search-box"></label>
+        <div class="top-actions nodrag" id="top-actions"></div>
+      </div>
+      <div id="list" class="list"></div>
+    </main>
+  </div>
+  <div id="drop" class="hidden"><div class="drop-frame"></div><div class="drop-inner"></div></div>
+  <script src="common.js"></script>
+  <script src="section.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

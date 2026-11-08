@@ -1,0 +1,5 @@
+yt-dlp[default]
+yt-dlp-ejs
+mutagen
+certifi
+pyinstaller

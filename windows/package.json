@@ -1,0 +1,48 @@
+{
+  "name": "dwn",
+  "productName": "Dwn",
+  "version": "1.0.0",
+  "description": "Download anything on the internet.",
+  "author": "Yuvraj Garg",
+  "license": "MIT",
+  "homepage": "https://github.com/YuvrajxGarg/dwn",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.yuvrajgarg.dwn",
+    "productName": "Dwn",
+    "copyright": "© Yuvraj Garg",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": ["src/**/*", "package.json"],
+    "extraResources": [
+      { "from": "../engine/build/dist/dwn-engine", "to": "engine" },
+      { "from": "build/tray.png", "to": "tray.png" },
+      { "from": "build/tray@2x.png", "to": "tray@2x.png" }
+    ],
+    "protocols": [{ "name": "Dwn link", "schemes": ["dwn"] }],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "Dwn-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dwn",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [{ "provider": "github", "owner": "YuvrajxGarg", "repo": "dwn", "releaseType": "release" }]
+  }
+}
