@@ -76,7 +76,11 @@ final class AppModel: ObservableObject {
     var api: API? { engine.api }
     var activeJobs: [Job] { jobs.filter { $0.isActive || $0.state == "failed" || $0.state == "cancelled" } }
 
+    /// The app's model, for AppKit entry points (quit handling) that can't reach SwiftUI state.
+    static weak var current: AppModel?
+
     init() {
+        AppModel.current = self
         engine.onReady = { [weak self] in self?.engineReady() }
         hotKey.onPress = { [weak self] in self?.shortcutPressed() }
     }
@@ -101,6 +105,8 @@ final class AppModel: ObservableObject {
             await refreshHistory()
             await refreshJobs()
             startPolling()
+            // Test hook: open a sheet at launch (used to check quitting with a sheet open).
+            if ProcessInfo.processInfo.environment["DWN_TEST_OPEN_SHEET"] != nil { onboarded = true; showBulk = true }
         }
     }
 

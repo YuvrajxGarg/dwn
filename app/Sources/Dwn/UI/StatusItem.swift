@@ -79,13 +79,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         settings.target = self
         m.addItem(settings)
         m.addItem(.separator())
-        m.addItem(NSMenuItem(title: "Quit Dwn", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let quit = NSMenuItem(title: "Quit Dwn", action: #selector(quitApp), keyEquivalent: "q")
+        quit.target = self
+        m.addItem(quit)
         item?.menu = m
         item?.button?.performClick(nil)
         item?.menu = nil
     }
 
     @objc private func quick() { model.quickPanel.show() }
+    @objc private func quitApp() { quitDwn() }
     @objc private func showUpdate() { model.showMainWindow(); model.updater.showSheet = true }
     @objc private func checkUpdates() {
         Task {

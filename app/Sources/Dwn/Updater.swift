@@ -176,7 +176,12 @@ final class Updater: ObservableObject {
             p.executableURL = URL(fileURLWithPath: "/bin/sh")
             p.arguments = [script.path]
             try p.run()
-            NSApp.terminate(nil)
+            showSheet = false
+            // Quit so the script can swap the app. If anything still holds the
+            // app open after a few seconds, exit anyway: the engine stops on its own
+            // when our end of its stdin closes.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { quitDwn() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { exit(0) }
         } catch {
             phase = .failed(error.localizedDescription)
         }
