@@ -77,7 +77,9 @@ jobs:
         run: DWN_TOOLS="$PWD/tools" ./build.sh --release
       - name: Check the signature
         run: |
-          codesign -dr - dist/Dwn.app 2>&1 | tee /dev/stderr | grep -q 'certificate leaf' \
+          # Self-signed, so the requirement reads "certificate root = H<sha1>".
+          ID=$(echo "$DWN_SIGN_IDENTITY" | tr 'A-F' 'a-f')
+          codesign -dr - dist/Dwn.app 2>&1 | tee /dev/stderr | grep -q "H\"$ID\"" \
             || { echo "Dwn.app is not signed with the Dwn certificate"; exit 1; }
       - name: Upload to the release
         env:
