@@ -4,7 +4,7 @@
 #   ./build.sh --install   also copy to ~/Applications
 #   ./build.sh --release   also write dist/Dwn-mac.zip and dist/Dwn-mac.zip.sha256
 #
-# Tools: ffmpeg/ffprobe/deno are taken from $DWN_TOOLS (a folder) when set, and
+# Tools: ffmpeg and deno are taken from $DWN_TOOLS (a folder) when set, and
 # bundled into the app so it runs on any Mac. Without it, the engine falls back
 # to Homebrew's copies at runtime.
 set -euo pipefail

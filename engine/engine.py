@@ -318,17 +318,20 @@ def format_selector(job: Job) -> tuple[str, dict]:
 
 
 def probe_codec(path: str) -> str:
-    ffprobe = FFMPEG and os.path.join(os.path.dirname(FFMPEG), "ffprobe.exe" if IS_WIN else "ffprobe")
-    if not ffprobe or not os.path.exists(ffprobe):
+    """The first video stream's codec, read from ffmpeg's own stream summary
+    (so the app doesn't need to ship ffprobe as well)."""
+    if not FFMPEG:
         return ""
     try:
-        out = subprocess.run(
-            [ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
-             "stream=codec_name", "-of", "default=nw=1:nk=1", path],
-            capture_output=True, text=True, timeout=30).stdout
-        return out.strip()
+        err = subprocess.run([FFMPEG, "-hide_banner", "-i", path], capture_output=True, text=True,
+                             timeout=30, encoding="utf-8", errors="replace").stderr
     except Exception:
         return ""
+    for line in err.splitlines():
+        m = re.search(r"Stream #\S+.*?: Video: (\w+)", line)
+        if m and "attached pic" not in line:
+            return m.group(1)
+    return ""
 
 
 def convert(job: Job, src: str) -> str:

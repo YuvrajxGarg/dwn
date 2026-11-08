@@ -42,13 +42,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Set version
         run: echo "${TAG#v}" > VERSION
-      - name: Portable ffmpeg, ffprobe and deno
+      - name: Portable ffmpeg and deno
         run: |
           mkdir -p tools
           curl -fsSL -o ffmpeg.zip  "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
-          curl -fsSL -o ffprobe.zip "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip"
           curl -fsSL -o deno.zip    "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip"
-          unzip -o ffmpeg.zip -d tools && unzip -o ffprobe.zip -d tools && unzip -o deno.zip -d tools
+          unzip -o ffmpeg.zip -d tools && unzip -o deno.zip -d tools
           chmod +x tools/*
           tools/ffmpeg -hide_banner -version | head -1
           tools/ffmpeg -hide_banner -encoders | grep -E 'h264_videotoolbox|hevc_videotoolbox|prores_videotoolbox'
@@ -83,13 +82,13 @@ jobs:
           .venv/Scripts/pyinstaller.exe --noconfirm --clean --log-level WARN --onedir --name dwn-engine \
             --collect-all yt_dlp --collect-all yt_dlp_ejs --collect-submodules mutagen \
             --distpath build/dist --workpath build/work --specpath build engine.py
-      - name: Portable ffmpeg, ffprobe and deno
+      - name: Portable ffmpeg and deno
         run: |
           mkdir -p engine/build/dist/dwn-engine/bin
           curl -fsSL -o ffmpeg.zip "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
           curl -fsSL -o deno.zip   "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
           unzip -q ffmpeg.zip -d ffmpeg && unzip -q deno.zip -d deno
-          cp ffmpeg/*/bin/ffmpeg.exe ffmpeg/*/bin/ffprobe.exe deno/deno.exe engine/build/dist/dwn-engine/bin/
+          cp ffmpeg/*/bin/ffmpeg.exe deno/deno.exe engine/build/dist/dwn-engine/bin/
           engine/build/dist/dwn-engine/bin/ffmpeg.exe -hide_banner -version | head -1
       - name: Smoke-test the engine
         run: |

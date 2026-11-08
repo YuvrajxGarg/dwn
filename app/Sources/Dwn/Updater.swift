@@ -182,28 +182,18 @@ final class Updater: ObservableObject {
         }
     }
 
+    /// Downloads with a native URLSession download task: full network speed,
+    /// written straight to disk, progress reported a few times a second.
     private func download(_ url: URL, to dest: URL) async throws {
-        let (bytes, resp) = try await URLSession.shared.bytes(from: url)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
-            throw APIError(message: "The update server didn't have the update. Try again later.")
-        }
-        let total = max(resp.expectedContentLength, 1)
-        FileManager.default.createFile(atPath: dest.path, contents: nil)
-        let h = try FileHandle(forWritingTo: dest)
-        defer { try? h.close() }
-        var buf = Data()
-        buf.reserveCapacity(1 << 20)
-        var got: Int64 = 0
-        for try await b in bytes {
-            buf.append(b)
-            if buf.count >= 1 << 20 {
-                try h.write(contentsOf: buf)
-                got += Int64(buf.count)
-                buf.removeAll(keepingCapacity: true)
-                phase = .downloading(min(0.99, Double(got) / Double(total)))
+        let loader = FileDownload(url: url) { [weak self] p in
+            Task { @MainActor in
+                guard let self, case .downloading = self.phase else { return }
+                self.phase = .downloading(min(0.99, p))
             }
         }
-        try h.write(contentsOf: buf)
+        let tmp = try await loader.run()
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.moveItem(at: tmp, to: dest)
         phase = .downloading(1)
     }
 
@@ -214,5 +204,62 @@ final class Updater: ObservableObject {
         try p.run()
         p.waitUntilExit()
         if p.terminationStatus != 0 { throw APIError(message: "The update couldn't be unpacked. Try again.") }
+    }
+}
+
+/// Bridges a URLSessionDownloadTask (delegate based) to async/await with progress.
+private final class FileDownload: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let url: URL
+    private let onProgress: (Double) -> Void
+    private var continuation: CheckedContinuation<URL, Error>?
+    private var lastReport = Date.distantPast
+    private var session: URLSession?
+
+    init(url: URL, onProgress: @escaping (Double) -> Void) {
+        self.url = url
+        self.onProgress = onProgress
+    }
+
+    func run() async throws -> URL {
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<URL, Error>) in
+            continuation = c
+            let cfg = URLSessionConfiguration.ephemeral
+            cfg.timeoutIntervalForRequest = 60
+            cfg.timeoutIntervalForResource = 3600
+            let s = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
+            session = s
+            s.downloadTask(with: url).resume()
+        }
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard totalBytesExpectedToWrite > 0, Date().timeIntervalSince(lastReport) > 0.15 else { return }
+        lastReport = Date()
+        onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // The temp file is deleted when this returns, so move it somewhere we own first.
+        let keep = FileManager.default.temporaryDirectory.appendingPathComponent("DwnDownload-\(UUID().uuidString)")
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+        do {
+            guard status == 200 else { throw APIError(message: "The update server didn't have the update. Try again later.") }
+            try FileManager.default.moveItem(at: location, to: keep)
+            finish(.success(keep))
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error { finish(.failure(APIError(message: "The download stopped. Check your connection and try again. (\(error.localizedDescription))"))) }
+    }
+
+    private func finish(_ r: Result<URL, Error>) {
+        guard let c = continuation else { return }
+        continuation = nil
+        session?.finishTasksAndInvalidate()
+        c.resume(with: r)
     }
 }
