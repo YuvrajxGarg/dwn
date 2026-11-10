@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreText
 
 /// The menu bar icon. Click opens the quick panel; right-click (or Control-click) shows a menu.
 @MainActor
@@ -40,6 +41,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } else {
             model.quickPanel.toggle()
         }
+        // Never leave the button drawn in its pressed state (the grey box behind the icon).
+        sender.highlight(false)
     }
 
     private func showMenu() {
@@ -82,9 +85,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let quit = NSMenuItem(title: "Quit Dwn", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         m.addItem(quit)
-        item?.menu = m
-        item?.button?.performClick(nil)
-        item?.menu = nil
+        // Pop the menu up under the icon directly. (Assigning item.menu and simulating a
+        // click left the button stuck in its highlighted state.)
+        if let button = item?.button {
+            m.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+            button.highlight(false)
+        }
     }
 
     @objc private func quick() { model.quickPanel.show() }
@@ -107,30 +113,40 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
-    /// The drop arrow on a baseline, drawn as a template image so it follows the menu bar's colour.
+    /// The "dwn↓" wordmark as a template image, so macOS tints it for light and dark menu bars.
     static func icon() -> NSImage {
-        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { r in
-            let w: CGFloat = 8.5, h: CGFloat = 11.5
-            let x = (r.width - w) / 2, y: CGFloat = 1.5
-            let stemHalf = w * 0.17
-            let headTop = y + h * 0.46
-            let p = NSBezierPath()
-            p.move(to: NSPoint(x: x + w / 2 - stemHalf, y: headTop))
-            p.line(to: NSPoint(x: x + w / 2 - stemHalf, y: y + stemHalf))
-            p.appendArc(withCenter: NSPoint(x: x + w / 2, y: y + stemHalf), radius: stemHalf,
-                        startAngle: 180, endAngle: 0, clockwise: false)
-            p.line(to: NSPoint(x: x + w / 2 + stemHalf, y: headTop))
-            p.line(to: NSPoint(x: x + w, y: headTop))
-            p.line(to: NSPoint(x: x + w / 2, y: y + h))
-            p.line(to: NSPoint(x: x, y: headTop))
-            p.close()
-            NSColor.black.setFill()
-            p.fill()
-            let base = NSBezierPath(roundedRect: NSRect(x: 3.5, y: 15, width: 11, height: 1.8), xRadius: 0.9, yRadius: 0.9)
-            base.fill()
+        let size: CGFloat = 13.5
+        let font = NSFont.systemFont(ofSize: size, weight: .black)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "dwn", attributes: [
+            .font: font, .kern: -size * 0.055, .foregroundColor: NSColor.black]))
+        let textW = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) - size * 0.055
+        let gap = size * 0.07, aw = size * 0.36, ah = size * 0.56
+        let height: CGFloat = 18
+        let width = ceil(textW + gap + aw) + 1
+        let baseline = floor((height - font.xHeight) / 2)
+        let img = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+            guard let cg = NSGraphicsContext.current?.cgContext else { return false }
+            cg.textPosition = CGPoint(x: 0.5, y: baseline)
+            CTLineDraw(line, cg)
+            // Drop arrow sitting on the baseline (y-up).
+            let r = CGRect(x: 0.5 + textW + gap, y: baseline, width: aw, height: ah)
+            let half = aw * 0.17, headTop = r.minY + ah * 0.54
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: r.midX - half, y: headTop))
+            p.addLine(to: CGPoint(x: r.midX - half, y: r.maxY - half))
+            p.addArc(center: CGPoint(x: r.midX, y: r.maxY - half), radius: half, startAngle: .pi, endAngle: 0, clockwise: true)
+            p.addLine(to: CGPoint(x: r.midX + half, y: headTop))
+            p.addLine(to: CGPoint(x: r.maxX, y: headTop))
+            p.addLine(to: CGPoint(x: r.midX, y: r.minY))
+            p.addLine(to: CGPoint(x: r.minX, y: headTop))
+            p.closeSubpath()
+            cg.addPath(p)
+            cg.setFillColor(NSColor.black.cgColor)
+            cg.fillPath()
             return true
         }
         img.isTemplate = true
+        img.accessibilityDescription = "Dwn"
         return img
     }
 }

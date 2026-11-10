@@ -21,17 +21,54 @@
   "build": {
     "appId": "com.yuvrajgarg.dwn",
     "productName": "Dwn",
-    "copyright": "© Yuvraj Garg",
-    "directories": { "output": "release", "buildResources": "build" },
-    "files": ["src/**/*", "package.json"],
-    "extraResources": [
-      { "from": "../engine/build/dist/dwn-engine", "to": "engine" },
-      { "from": "build/tray.png", "to": "tray.png" },
-      { "from": "build/tray@2x.png", "to": "tray@2x.png" }
+    "copyright": "\u00a9 Yuvraj Garg",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
     ],
-    "protocols": [{ "name": "Dwn link", "schemes": ["dwn"] }],
+    "extraResources": [
+      {
+        "from": "../engine/build/dist/dwn-engine",
+        "to": "engine"
+      },
+      {
+        "from": "build/tray-white.png",
+        "to": "tray-white.png"
+      },
+      {
+        "from": "build/tray-white@2x.png",
+        "to": "tray-white@2x.png"
+      },
+      {
+        "from": "build/tray-black.png",
+        "to": "tray-black.png"
+      },
+      {
+        "from": "build/tray-black@2x.png",
+        "to": "tray-black@2x.png"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Dwn link",
+        "schemes": [
+          "dwn"
+        ]
+      }
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "artifactName": "Dwn-Setup-${version}.${ext}"
     },
@@ -43,6 +80,13 @@
       "shortcutName": "Dwn",
       "deleteAppDataOnUninstall": false
     },
-    "publish": [{ "provider": "github", "owner": "YuvrajxGarg", "repo": "dwn", "releaseType": "release" }]
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "YuvrajxGarg",
+        "repo": "dwn",
+        "releaseType": "release"
+      }
+    ]
   }
 }

@@ -1,16 +1,37 @@
-// Renders Dwn's app icon (dark tile + lime drop arrow) into an .iconset.
-// Usage: swift make_icon.swift <out.iconset>
+// Renders Dwn's icons from the "dwn↓" wordmark.
+//   swift make_icon.swift icon <out.iconset>   macOS app icon: dark tile, white wordmark
+//   swift make_icon.swift tray <out dir>       Windows tray: wordmark in white and black, 1x and 2x
 import AppKit
+import CoreText
 
-let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset"
-try? FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
+/// The wordmark: "dwn" in a heavy grotesk set tight, then the drop arrow on the baseline.
+/// Drawn with CoreGraphics (y-up). Returns the drawn width.
+@discardableResult
+func drawWordmark(_ cg: CGContext, x: CGFloat, baseline: CGFloat, size: CGFloat, color: CGColor, draw: Bool = true) -> CGFloat {
+    let font = NSFont.systemFont(ofSize: size, weight: .black)
+    let attrs: [NSAttributedString.Key: Any] = [.font: font, .kern: -size * 0.055, .foregroundColor: NSColor(cgColor: color)!]
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: "dwn", attributes: attrs))
+    let textW = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) - size * 0.055
+    let gap = size * 0.07
+    let aw = size * 0.36, ah = size * 0.56
+    if draw {
+        cg.saveGState()
+        cg.textPosition = CGPoint(x: x, y: baseline)
+        CTLineDraw(line, cg)
+        cg.restoreGState()
+        cg.addPath(arrowPath(in: CGRect(x: x + textW + gap, y: baseline, width: aw, height: ah)))
+        cg.setFillColor(color)
+        cg.fillPath()
+    }
+    return textW + gap + aw
+}
 
+/// Rounded stem flowing into a solid head, pointing down (y-up coordinates).
 func arrowPath(in r: CGRect) -> CGPath {
     let p = CGMutablePath()
     let w = r.width, h = r.height
-    // y-up: one continuous outline, stem on top, head pointing down.
     let half = w * 0.17
-    let headTop = r.maxY - h * 0.46
+    let headTop = r.minY + h * 0.54
     p.move(to: CGPoint(x: r.midX - half, y: headTop))
     p.addLine(to: CGPoint(x: r.midX - half, y: r.maxY - half))
     p.addArc(center: CGPoint(x: r.midX, y: r.maxY - half), radius: half, startAngle: .pi, endAngle: 0, clockwise: true)
@@ -22,70 +43,82 @@ func arrowPath(in r: CGRect) -> CGPath {
     return p
 }
 
-func render(_ px: Int) -> Data {
-    let s = CGFloat(px)
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px, bitsPerSample: 8,
+func bitmap(_ w: Int, _ h: Int, _ body: (CGContext) -> Void) -> Data {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h, bitsPerSample: 8,
                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
                                bytesPerRow: 0, bitsPerPixel: 0)!
     let ctx = NSGraphicsContext(bitmapImageRep: rep)!
     NSGraphicsContext.current = ctx
-    let cg = ctx.cgContext
-
-    // macOS icon grid: the tile is ~80% of the canvas, with a soft shadow.
-    let inset = s * 0.098
-    let tile = CGRect(x: inset, y: inset * 1.15, width: s - inset * 2, height: s - inset * 2)
-    let radius = tile.width * 0.225
-    let tilePath = CGPath(roundedRect: tile, cornerWidth: radius, cornerHeight: radius, transform: nil)
-
-    cg.saveGState()
-    cg.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.03, color: NSColor.black.withAlphaComponent(0.45).cgColor)
-    cg.addPath(tilePath)
-    cg.setFillColor(NSColor(white: 0.07, alpha: 1).cgColor)
-    cg.fillPath()
-    cg.restoreGState()
-
-    cg.saveGState()
-    cg.addPath(tilePath)
-    cg.clip()
-    let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                          colors: [NSColor(white: 0.19, alpha: 1).cgColor, NSColor(white: 0.055, alpha: 1).cgColor] as CFArray,
-                          locations: [0, 1])!
-    cg.drawLinearGradient(grad, start: CGPoint(x: 0, y: tile.maxY), end: CGPoint(x: 0, y: tile.minY), options: [])
-    // Lime glow behind the arrow.
-    let glow = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                          colors: [NSColor(red: 0.8, green: 1, blue: 0.3, alpha: 0.22).cgColor,
-                                   NSColor(red: 0.8, green: 1, blue: 0.3, alpha: 0).cgColor] as CFArray,
-                          locations: [0, 1])!
-    cg.drawRadialGradient(glow, startCenter: CGPoint(x: tile.midX, y: tile.midY - tile.height * 0.08), startRadius: 0,
-                          endCenter: CGPoint(x: tile.midX, y: tile.midY - tile.height * 0.08), endRadius: tile.width * 0.5, options: [])
-    cg.restoreGState()
-
-    // Hairline highlight.
-    cg.addPath(CGPath(roundedRect: tile.insetBy(dx: s * 0.002, dy: s * 0.002), cornerWidth: radius, cornerHeight: radius, transform: nil))
-    cg.setStrokeColor(NSColor.white.withAlphaComponent(0.12).cgColor)
-    cg.setLineWidth(max(1, s * 0.004))
-    cg.strokePath()
-
-    // Arrow
-    let aw = tile.width * 0.40, ah = tile.width * 0.50
-    let arect = CGRect(x: tile.midX - aw / 2, y: tile.midY - ah / 2, width: aw, height: ah)
-    cg.addPath(arrowPath(in: arect))
-    cg.setFillColor(NSColor(red: 0.80, green: 1.0, blue: 0.30, alpha: 1).cgColor)
-    cg.fillPath()
-
-    // Baseline the arrow lands on.
-    let lineW = tile.width * 0.46, lineH = max(2, tile.width * 0.035)
-    let line = CGRect(x: tile.midX - lineW / 2, y: arect.minY - tile.height * 0.085, width: lineW, height: lineH)
-    cg.addPath(CGPath(roundedRect: line, cornerWidth: lineH / 2, cornerHeight: lineH / 2, transform: nil))
-    cg.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
-    cg.fillPath()
-
+    body(ctx.cgContext)
     NSGraphicsContext.current = nil
     return rep.representation(using: .png, properties: [:])!
 }
 
-for (name, px) in [("16x16", 16), ("16x16@2x", 32), ("32x32", 32), ("32x32@2x", 64), ("128x128", 128),
-                   ("128x128@2x", 256), ("256x256", 256), ("256x256@2x", 512), ("512x512", 512), ("512x512@2x", 1024)] {
-    try! render(px).write(to: URL(fileURLWithPath: "\(out)/icon_\(name).png"))
+/// App icon: near-black tile on the macOS icon grid, white wordmark centred.
+func appIcon(_ px: Int) -> Data {
+    bitmap(px, px) { cg in
+        let s = CGFloat(px)
+        let inset = s * 0.098
+        let tile = CGRect(x: inset, y: inset * 1.15, width: s - inset * 2, height: s - inset * 2)
+        let radius = tile.width * 0.225
+        let tilePath = CGPath(roundedRect: tile, cornerWidth: radius, cornerHeight: radius, transform: nil)
+
+        cg.saveGState()
+        cg.setShadow(offset: CGSize(width: 0, height: -s * 0.012), blur: s * 0.03, color: NSColor.black.withAlphaComponent(0.45).cgColor)
+        cg.addPath(tilePath)
+        cg.setFillColor(NSColor(white: 0.07, alpha: 1).cgColor)
+        cg.fillPath()
+        cg.restoreGState()
+
+        cg.saveGState()
+        cg.addPath(tilePath)
+        cg.clip()
+        let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                              colors: [NSColor(white: 0.17, alpha: 1).cgColor, NSColor(white: 0.05, alpha: 1).cgColor] as CFArray,
+                              locations: [0, 1])!
+        cg.drawLinearGradient(grad, start: CGPoint(x: 0, y: tile.maxY), end: CGPoint(x: 0, y: tile.minY), options: [])
+        cg.restoreGState()
+
+        cg.addPath(CGPath(roundedRect: tile.insetBy(dx: s * 0.002, dy: s * 0.002), cornerWidth: radius, cornerHeight: radius, transform: nil))
+        cg.setStrokeColor(NSColor.white.withAlphaComponent(0.12).cgColor)
+        cg.setLineWidth(max(1, s * 0.004))
+        cg.strokePath()
+
+        // Small sizes get a bigger wordmark so it stays readable.
+        let size = tile.width * (px <= 32 ? 0.36 : 0.30)
+        let white = NSColor(white: 0.97, alpha: 1).cgColor
+        let w = drawWordmark(cg, x: 0, baseline: 0, size: size, color: white, draw: false)
+        let capCenter = size * 0.36   // roughly the middle of the x-height
+        drawWordmark(cg, x: tile.midX - w / 2, baseline: tile.midY - capCenter, size: size, color: white)
+    }
+}
+
+/// Tray icon for Windows: just the wordmark, fitted to a square.
+func trayIcon(_ px: Int, white: Bool) -> Data {
+    bitmap(px, px) { cg in
+        let s = CGFloat(px)
+        let color = white ? NSColor.white.cgColor : NSColor.black.cgColor
+        var size = s * 0.5
+        let w = drawWordmark(cg, x: 0, baseline: 0, size: size, color: color, draw: false)
+        size *= (s * 0.98) / w
+        let w2 = drawWordmark(cg, x: 0, baseline: 0, size: size, color: color, draw: false)
+        drawWordmark(cg, x: (s - w2) / 2, baseline: s / 2 - size * 0.36, size: size, color: color)
+    }
+}
+
+let args = CommandLine.arguments
+let mode = args.count > 1 ? args[1] : "icon"
+let out = args.count > 2 ? args[2] : (mode == "icon" ? "AppIcon.iconset" : ".")
+try? FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)
+if mode == "tray" {
+    for (name, px) in [("", 16), ("@2x", 32)] {
+        try! trayIcon(px, white: true).write(to: URL(fileURLWithPath: "\(out)/tray-white\(name).png"))
+        try! trayIcon(px, white: false).write(to: URL(fileURLWithPath: "\(out)/tray-black\(name).png"))
+    }
+} else {
+    for (name, px) in [("16x16", 16), ("16x16@2x", 32), ("32x32", 32), ("32x32@2x", 64), ("128x128", 128),
+                       ("128x128@2x", 256), ("256x256", 256), ("256x256@2x", 512), ("512x512", 512), ("512x512@2x", 1024)] {
+        try! appIcon(px).write(to: URL(fileURLWithPath: "\(out)/icon_\(name).png"))
+    }
 }
 print("wrote \(out)")

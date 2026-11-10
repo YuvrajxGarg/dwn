@@ -3,7 +3,7 @@
 // token; every renderer call goes through main (see `api` below).
 const {
   app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, shell, dialog,
-  clipboard, Notification, screen, nativeImage,
+  clipboard, Notification, screen, nativeImage, nativeTheme,
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -254,9 +254,15 @@ function togglePanel() {
 
 // ---------------------------------------------------------------- tray, shortcut, links
 
+// The "dwn↓" wordmark, white on a dark taskbar and black on a light one.
+// macOS gets a template image that the menu bar tints itself.
 function trayImage() {
-  const p = path.join(RES, 'tray.png');
-  const img = nativeImage.createFromPath(p);
+  let name = 'tray-black.png';
+  if (IS_WIN) {
+    const dark = nativeTheme.shouldUseDarkColorsForSystemIntegratedUI ?? nativeTheme.shouldUseDarkColors;
+    name = dark ? 'tray-white.png' : 'tray-black.png';
+  }
+  const img = nativeImage.createFromPath(path.join(RES, name));
   if (!IS_WIN) img.setTemplateImage(true);
   return img;
 }
@@ -283,6 +289,7 @@ function applyTray() {
   if (settings.get('trayEnabled')) {
     if (!tray) {
       tray = new Tray(trayImage());
+      nativeTheme.on('updated', () => { if (tray) tray.setImage(trayImage()); });
       tray.setToolTip('Dwn');
       tray.on('click', togglePanel);
       tray.on('right-click', () => tray.popUpContextMenu(buildTrayMenu()));
