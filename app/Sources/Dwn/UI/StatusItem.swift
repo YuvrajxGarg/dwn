@@ -18,6 +18,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let it = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             it.button?.image = Self.icon()
             it.button?.imagePosition = .imageLeading
+            // No grey box behind the icon, even while it's pressed.
+            (it.button?.cell as? NSButtonCell)?.highlightsBy = []
+            it.button?.focusRingType = .none
             it.button?.target = self
             it.button?.action = #selector(clicked(_:))
             it.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -94,7 +97,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func quick() { model.quickPanel.show() }
-    @objc private func quitApp() { quitDwn() }
+    @objc private func quitApp() { quitDwn(force: true) }
     @objc private func showUpdate() { model.showMainWindow(); model.updater.showSheet = true }
     @objc private func checkUpdates() {
         Task {
@@ -113,40 +116,39 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
-    /// The "dwn↓" wordmark as a template image, so macOS tints it for light and dark menu bars.
+    /// A download symbol: an arrow dropping into an open tray, in even rounded
+    /// strokes. Template image, so macOS tints it for light and dark menu bars.
     static func icon() -> NSImage {
-        let size: CGFloat = 13.5
-        let font = NSFont.systemFont(ofSize: size, weight: .black)
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "dwn", attributes: [
-            .font: font, .kern: -size * 0.055, .foregroundColor: NSColor.black]))
-        let textW = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) - size * 0.055
-        let gap = size * 0.07, aw = size * 0.36, ah = size * 0.56
-        let height: CGFloat = 18
-        let width = ceil(textW + gap + aw) + 1
-        let baseline = floor((height - font.xHeight) / 2)
-        let img = NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
+        let img = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
             guard let cg = NSGraphicsContext.current?.cgContext else { return false }
-            cg.textPosition = CGPoint(x: 0.5, y: baseline)
-            CTLineDraw(line, cg)
-            // Drop arrow sitting on the baseline (y-up).
-            let r = CGRect(x: 0.5 + textW + gap, y: baseline, width: aw, height: ah)
-            let half = aw * 0.17, headTop = r.minY + ah * 0.54
-            let p = CGMutablePath()
-            p.move(to: CGPoint(x: r.midX - half, y: headTop))
-            p.addLine(to: CGPoint(x: r.midX - half, y: r.maxY - half))
-            p.addArc(center: CGPoint(x: r.midX, y: r.maxY - half), radius: half, startAngle: .pi, endAngle: 0, clockwise: true)
-            p.addLine(to: CGPoint(x: r.midX + half, y: headTop))
-            p.addLine(to: CGPoint(x: r.maxX, y: headTop))
-            p.addLine(to: CGPoint(x: r.midX, y: r.minY))
-            p.addLine(to: CGPoint(x: r.minX, y: headTop))
-            p.closeSubpath()
-            cg.addPath(p)
-            cg.setFillColor(NSColor.black.cgColor)
-            cg.fillPath()
+            DownloadGlyph.draw(in: cg, size: 18, color: NSColor.black.cgColor, flipped: true)
             return true
         }
         img.isTemplate = true
         img.accessibilityDescription = "Dwn"
         return img
+    }
+}
+
+/// The download symbol, shared by the menu bar icon (and mirrored in tools/make_icon.swift for Windows).
+enum DownloadGlyph {
+    /// Draws on an 18-unit grid scaled to `size`. `flipped` = y grows downwards.
+    static func draw(in cg: CGContext, size: CGFloat, color: CGColor, flipped: Bool) {
+        let k = size / 18
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: (flipped ? y : 18 - y) * k) }
+        cg.setStrokeColor(color)
+        cg.setLineWidth(1.75 * k)
+        cg.setLineCap(.round)
+        cg.setLineJoin(.round)
+        // Arrow: stem and head.
+        cg.move(to: pt(9, 2.6)); cg.addLine(to: pt(9, 11.2))
+        cg.move(to: pt(5.4, 7.8)); cg.addLine(to: pt(9, 11.4)); cg.addLine(to: pt(12.6, 7.8))
+        // Open tray it lands in.
+        cg.move(to: pt(3, 11.6)); cg.addLine(to: pt(3, 13.6))
+        cg.addQuadCurve(to: pt(4.8, 15.4), control: pt(3, 15.4))
+        cg.addLine(to: pt(13.2, 15.4))
+        cg.addQuadCurve(to: pt(15, 13.6), control: pt(15, 15.4))
+        cg.addLine(to: pt(15, 11.6))
+        cg.strokePath()
     }
 }

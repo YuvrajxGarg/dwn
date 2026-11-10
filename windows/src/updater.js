@@ -6,11 +6,12 @@ const { app } = require('electron');
 const settings = require('./settings');
 
 const REPO = 'YuvrajxGarg/dwn';
-const SIX_HOURS = 6 * 3600 * 1000;
+const SIX_HOURS = 3 * 3600 * 1000; // check every 3 hours
 
 let s = { phase: 'idle', version: null, notes: '', progress: 0, error: null, checkedAt: null, page: null };
 let hooks = { onChange() {}, notify() {} };
 let au = null;
+let installWhenReady = false;
 
 function set(patch) {
   s = { ...s, ...patch };
@@ -70,8 +71,10 @@ function init(h) {
   if (app.isPackaged && process.platform === 'win32') {
     try {
       ({ autoUpdater: au } = require('electron-updater'));
-      au.autoDownload = false;
+      // Background updates: download the newest version quietly and install it on quit.
+      au.autoDownload = !!settings.get('autoInstallUpdates');
       au.autoInstallOnAppQuit = true;
+      au.allowDowngrade = false;
       au.on('checking-for-update', () => set({ phase: 'checking', error: null }));
       au.on('update-available', (info) => {
         set({ phase: 'available', version: info.version, notes: notesText(info.releaseNotes),
@@ -80,7 +83,10 @@ function init(h) {
       });
       au.on('update-not-available', (info) => set({ phase: 'upToDate', version: info.version, checkedAt: Date.now() }));
       au.on('download-progress', (p) => set({ phase: 'downloading', progress: (p.percent || 0) / 100 }));
-      au.on('update-downloaded', (info) => set({ phase: 'ready', version: info.version, progress: 1 }));
+      au.on('update-downloaded', (info) => {
+        set({ phase: 'ready', version: info.version, progress: 1 });
+        if (installWhenReady) { installWhenReady = false; setImmediate(() => au.quitAndInstall(false, true)); }
+      });
       au.on('error', (e) => set({ phase: 'failed', error: friendly(e) }));
     } catch {
       au = null;
@@ -101,6 +107,7 @@ function friendly(e) {
 async function check(manual) {
   if (s.phase === 'downloading') return state();
   if (au) {
+    au.autoDownload = !!settings.get('autoInstallUpdates');
     try { await au.checkForUpdates(); } catch (e) { set({ phase: manual ? 'failed' : 'idle', error: friendly(e) }); }
   } else {
     await checkGitHub(manual);
@@ -115,12 +122,26 @@ async function install() {
     shell.openExternal(s.page || `https://github.com/${REPO}/releases/latest`);
     return state();
   }
-  if (s.phase === 'ready') {
+  // Ask GitHub again first: if a newer release came out since the last check,
+  // install that one directly instead of anything in between.
+  const readyVersion = s.phase === 'ready' ? s.version : null;
+  let latest = null;
+  try {
+    au.autoDownload = false;
+    const r = await au.checkForUpdates();
+    latest = r && r.updateInfo && r.updateInfo.version;
+  } catch (e) {
+    if (!readyVersion) { set({ phase: 'failed', error: friendly(e) }); return state(); }
+  } finally {
+    au.autoDownload = !!settings.get('autoInstallUpdates');
+  }
+  if (readyVersion && (!latest || !newer(latest, readyVersion))) {
     setImmediate(() => au.quitAndInstall(false, true));
     return state();
   }
+  installWhenReady = true;
   set({ phase: 'downloading', progress: 0 });
-  try { await au.downloadUpdate(); } catch (e) { set({ phase: 'failed', error: friendly(e) }); }
+  try { await au.downloadUpdate(); } catch (e) { installWhenReady = false; set({ phase: 'failed', error: friendly(e) }); }
   return state();
 }
 

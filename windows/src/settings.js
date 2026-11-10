@@ -14,6 +14,7 @@ const DEFAULTS = {
   trayEnabled: true,
   launchAtLogin: false,
   autoCheckUpdates: true,
+  autoInstallUpdates: true,   // download in the background, install on quit
   notifiedVersion: '',
 };
 

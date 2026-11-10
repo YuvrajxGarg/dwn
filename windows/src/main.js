@@ -366,6 +366,7 @@ ipcMain.handle('settings:get', () => settings.all());
 ipcMain.handle('settings:set', (_e, patch) => {
   settings.set(patch);
   if ('trayEnabled' in patch) applyTray();
+  if ('autoInstallUpdates' in patch) updater.check(false);
   if ('launchAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: !!patch.launchAtLogin, args: ['--hidden'] });
   let shortcut = { ok: true };
   if ('shortcut' in patch || 'hotkeyEnabled' in patch) shortcut = applyShortcut();

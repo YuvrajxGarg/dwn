@@ -115,7 +115,7 @@ private struct QuickSettings: View {
                 Toggle("Hide the Dock icon", isOn: $model.hideDock)
                     .disabled(!model.menuBarEnabled)
                 Toggle("Open at login", isOn: Binding(get: { model.launchAtLogin }, set: { model.setLaunchAtLogin($0) }))
-                Text("Click the menu bar icon for the quick download panel. Closing the window keeps Dwn running there.")
+                Text("Click the menu bar icon for the quick download panel. Closing the window or choosing Quit from the Dock keeps Dwn running there; choose Quit Dwn in the menu bar menu (or ⌥⌘Q) to quit completely.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Browser") {

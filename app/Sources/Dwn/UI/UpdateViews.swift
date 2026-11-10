@@ -11,6 +11,9 @@ struct UpdatePill: View {
                     if case .downloading(let p) = updater.phase {
                         ProgressView(value: p).progressViewStyle(.circular).controlSize(.mini).tint(.black)
                         Text("Updating… \(Int(p * 100))%")
+                    } else if updater.isReady {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Text("Restart to update")
                     } else {
                         Image(systemName: "arrow.down.circle.fill")
                         Text("Update to \(v)")
@@ -61,7 +64,8 @@ struct UpdateSheet: View {
                 Spacer()
                 Button("Later") { dismiss() }.buttonStyle(QuietButtonStyle(height: 36)).keyboardShortcut(.cancelAction)
                 Button { Task { await updater.install() } } label: {
-                    Label("Update and restart", systemImage: "arrow.down")
+                    Label(updater.isReady ? "Restart to update" : "Update and restart",
+                          systemImage: updater.isReady ? "arrow.clockwise" : "arrow.down")
                 }
                 .buttonStyle(PrimaryButtonStyle(height: 36))
                 .frame(width: 200)
@@ -90,6 +94,9 @@ struct UpdateSheet: View {
             }
         case .installing:
             Label("Installing. Dwn will reopen in a moment.", systemImage: "gearshape.2").font(.ui(12.5)).foregroundStyle(Theme.text2)
+        case .ready:
+            Label("Downloaded and ready. It installs when you quit Dwn, or restart now.", systemImage: "checkmark.circle.fill")
+                .font(.ui(12.5)).foregroundStyle(Theme.accent)
         case .failed(let m):
             Label(m, systemImage: "exclamationmark.triangle.fill").font(.ui(12.5)).foregroundStyle(Theme.warn)
         default:
@@ -123,7 +130,9 @@ struct UpdateSettings: View {
             }
             Section {
                 Toggle("Check for updates automatically", isOn: $updater.autoCheck)
-                Text("Dwn checks GitHub for new releases when it opens and every few hours, and lets you know when one is ready.")
+                Toggle("Download and install updates automatically", isOn: $updater.autoInstall)
+                    .disabled(!updater.autoCheck)
+                Text("New versions download in the background and install when you quit Dwn. Dwn always goes straight to the newest version, never one in between.")
                     .font(.caption).foregroundStyle(.secondary)
                 Link("All releases on GitHub", destination: URL(string: "https://github.com/\(updater.repo)/releases")!)
                     .font(.caption)
@@ -140,6 +149,7 @@ struct UpdateSettings: View {
         case .available: Text("Version \(updater.latest?.version ?? "") is available").foregroundStyle(Theme.accent)
         case .downloading(let p): Text("Downloading \(Int(p * 100))%").foregroundStyle(.secondary)
         case .installing: Text("Installing…").foregroundStyle(.secondary)
+        case .ready: Text("Version \(updater.latest?.version ?? "") is downloaded and ready").foregroundStyle(Theme.accent)
         case .failed(let m): Text(m).foregroundStyle(Theme.warn)
         }
     }

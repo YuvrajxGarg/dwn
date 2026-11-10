@@ -757,8 +757,11 @@ function openSettings(page = 'general') {
         h('div', { style: { display: 'flex', gap: '8px' } },
           h('button', { class: 'btn-quiet', onclick: async () => { await invoke('update:check'); S.update = await invoke('update:state'); go('updates'); } }, 'Check for updates'),
           ['available', 'downloading', 'ready'].includes(u.phase) ? h('button', { class: 'btn-quiet', onclick: openUpdate }, `Update to ${u.version}`) : null),
-        h('div', { class: 'group' }, optionRow('refresh', 'Check for updates automatically', S.settings.autoCheckUpdates !== false, (v) => setSettings({ autoCheckUpdates: v }),
-          'Dwn checks GitHub for new releases when it opens and every few hours, and lets you know when one is ready.')),
+        h('div', { class: 'group' },
+          optionRow('refresh', 'Check for updates automatically', S.settings.autoCheckUpdates !== false, (v) => setSettings({ autoCheckUpdates: v }),
+            'Dwn checks GitHub for new releases when it opens and every few hours.'),
+          optionRow('down', 'Download and install updates automatically', S.settings.autoInstallUpdates !== false, (v) => setSettings({ autoInstallUpdates: v }),
+            'New versions download in the background and install when you quit Dwn. Dwn always goes straight to the newest version.')),
         h('button', { class: 'btn-link', style: { alignSelf: 'flex-start' }, onclick: () => invoke('shell:external', `https://github.com/${u.repo}/releases`) }, 'All releases on GitHub')];
     },
   };

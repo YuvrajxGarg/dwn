@@ -3,15 +3,22 @@ import CryptoKit
 import Foundation
 import UserNotifications
 
-/// Checks GitHub Releases for a newer Dwn, notifies once per version, and
-/// installs it in place: download → verify SHA-256 → unzip → swap → relaunch.
+/// Keeps Dwn up to date from GitHub Releases.
 ///
-/// Release assets it expects: `Dwn-mac.zip` and `Dwn-mac.zip.sha256`.
+/// - Every install first asks GitHub for the newest release, so Dwn always
+///   jumps straight to the latest version and never installs one in between.
+/// - With automatic updates on, the newest version downloads quietly in the
+///   background (verified with SHA-256 and unpacked) and is installed the next
+///   time Dwn quits, or right away with "Restart to update". If an even newer
+///   release appears before then, it replaces the one waiting.
+///
+/// Release assets: `Dwn-mac.zip` and `Dwn-mac.zip.sha256`.
 @MainActor
 final class Updater: ObservableObject {
     enum Phase: Equatable {
         case idle, checking, upToDate, available
         case downloading(Double)
+        case ready          // newest version downloaded and waiting to be installed
         case installing
         case failed(String)
     }
@@ -31,70 +38,102 @@ final class Updater: ObservableObject {
     @Published var autoCheck = UserDefaults.standard.object(forKey: "updateAutoCheck") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoCheck, forKey: "updateAutoCheck") }
     }
+    /// Download new versions in the background and install them when Dwn quits.
+    @Published var autoInstall = UserDefaults.standard.object(forKey: "updateAutoInstall") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(autoInstall, forKey: "updateAutoInstall")
+            if autoInstall, case .available = phase { Task { await stageNewest() } }
+        }
+    }
     /// Shown when the user clicks the update pill or notification.
     @Published var showSheet = false
 
     let repo: String = Bundle.main.object(forInfoDictionaryKey: "DwnUpdateRepo") as? String ?? "YuvrajxGarg/dwn"
     var current: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0" }
     var hasUpdate: Bool {
-        if case .available = phase { return true }
-        if case .downloading = phase { return true }
-        return false
+        switch phase {
+        case .available, .downloading, .ready, .installing: return true
+        default: return false
+        }
     }
+    var isReady: Bool { if case .ready = phase { return true } else { return false } }
 
     private var timer: Timer?
+    private var staging = false
+
+    /// Where a downloaded update waits: ~/Library/Application Support/Dwn/Update/Dwn.app
+    private var stageDir: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Dwn/Update")
+    }
+    private var stagedApp: URL { stageDir.appendingPathComponent("Dwn.app") }
+    private var stagedVersion: String? {
+        get { UserDefaults.standard.string(forKey: "updateStagedVersion") }
+        set { UserDefaults.standard.set(newValue, forKey: "updateStagedVersion") }
+    }
 
     func start() {
         guard timer == nil else { return }
+        // A staged update that's no newer than what's running is leftover; drop it.
+        if let v = stagedVersion, !Self.isNewer(v, than: current) { discardStaged() }
         Task {
             try? await Task.sleep(for: .seconds(6))
             if autoCheck { await check(manual: false) }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 3 * 3600, repeats: true) { [weak self] _ in
             Task { @MainActor in if self?.autoCheck == true { await self?.check(manual: false) } }
         }
     }
 
     // MARK: check
 
+    /// The newest published release, straight from GitHub (never cached).
+    private func fetchLatest() async throws -> Release {
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("Dwn/\(current)", forHTTPHeaderField: "User-Agent")
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 20
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code == 404 { throw APIError(message: "No releases have been published yet.") }
+        guard code == 200, let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw APIError(message: "Couldn't reach the update server. Check your connection.")
+        }
+        let tag = (obj["tag_name"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+        let assets = obj["assets"] as? [[String: Any]] ?? []
+        func asset(_ name: String) -> URL? {
+            (assets.first { ($0["name"] as? String) == name }?["browser_download_url"] as? String).flatMap(URL.init(string:))
+        }
+        let rel = Release(
+            version: tag,
+            notes: obj["body"] as? String ?? "",
+            page: URL(string: obj["html_url"] as? String ?? "https://github.com/\(repo)/releases")!,
+            zip: asset("Dwn-mac.zip"),
+            sha: asset("Dwn-mac.zip.sha256"),
+            published: (obj["published_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) })
+        latest = rel
+        lastChecked = Date()
+        UserDefaults.standard.set(lastChecked, forKey: "updateLastChecked")
+        return rel
+    }
+
     func check(manual: Bool) async {
         if case .downloading = phase { return }
-        phase = .checking
+        if case .installing = phase { return }
+        let wasReady = isReady
+        if !wasReady { phase = .checking }
         do {
-            var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
-            req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            req.setValue("Dwn/\(current)", forHTTPHeaderField: "User-Agent")
-            req.cachePolicy = .reloadIgnoringLocalCacheData
-            req.timeoutInterval = 20
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            if code == 404 { throw APIError(message: "No releases have been published yet.") }
-            guard code == 200, let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw APIError(message: "Couldn't reach the update server. Check your connection.")
-            }
-            let tag = (obj["tag_name"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-            let assets = obj["assets"] as? [[String: Any]] ?? []
-            func asset(_ name: String) -> URL? {
-                (assets.first { ($0["name"] as? String) == name }?["browser_download_url"] as? String).flatMap(URL.init(string:))
-            }
-            let rel = Release(
-                version: tag,
-                notes: obj["body"] as? String ?? "",
-                page: URL(string: obj["html_url"] as? String ?? "https://github.com/\(repo)/releases")!,
-                zip: asset("Dwn-mac.zip"),
-                sha: asset("Dwn-mac.zip.sha256"),
-                published: (obj["published_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) })
-            latest = rel
-            lastChecked = Date()
-            UserDefaults.standard.set(lastChecked, forKey: "updateLastChecked")
-            if Self.isNewer(rel.version, than: current) {
+            let rel = try await fetchLatest()
+            guard Self.isNewer(rel.version, than: current) else { phase = .upToDate; return }
+            if stagedVersion == rel.version, FileManager.default.fileExists(atPath: stagedApp.path) {
+                phase = .ready
+            } else {
                 phase = .available
                 notifyOnce(rel)
-            } else {
-                phase = .upToDate
+                if autoInstall { await stageNewest() }
             }
         } catch {
-            phase = manual ? .failed(error.localizedDescription) : .idle
+            if wasReady { phase = .ready } else { phase = manual ? .failed(error.localizedDescription) : .idle }
         }
     }
 
@@ -114,30 +153,34 @@ final class Updater: ObservableObject {
         UserDefaults.standard.set(rel.version, forKey: key)
         let c = UNMutableNotificationContent()
         c.title = "Dwn \(rel.version) is available"
-        c.body = "Click to see what's new and update."
+        c.body = autoInstall ? "It's downloading in the background and installs when you quit Dwn."
+                             : "Click to see what's new and update."
         c.userInfo = ["update": rel.version]
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(rel.version)", content: c, trigger: nil))
     }
 
-    // MARK: install
+    // MARK: staging
 
-    func install() async {
-        guard let rel = latest else { return }
-        guard let zipURL = rel.zip else {
-            NSWorkspace.shared.open(rel.page)
-            return
-        }
-        let target = Bundle.main.bundleURL
-        let parent = target.deletingLastPathComponent()
-        guard FileManager.default.isWritableFile(atPath: parent.path), target.pathExtension == "app" else {
-            phase = .failed("This copy can't update itself where it is. The download page opens instead.")
-            NSWorkspace.shared.open(rel.page)
-            return
-        }
+    /// Download, verify and unpack the newest release into the staging folder.
+    /// Asks GitHub for the newest version first, so an in-between version is never staged.
+    @discardableResult
+    func stageNewest() async -> Bool {
+        guard !staging else { return false }
+        staging = true
+        defer { staging = false }
         do {
+            let rel = try await fetchLatest()
+            guard Self.isNewer(rel.version, than: current) else { phase = .upToDate; return false }
+            if stagedVersion == rel.version, FileManager.default.fileExists(atPath: stagedApp.path) {
+                phase = .ready
+                return true
+            }
+            guard let zipURL = rel.zip else { phase = .available; return false }
+
             phase = .downloading(0)
             let work = FileManager.default.temporaryDirectory.appendingPathComponent("DwnUpdate-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: work) }
             let zip = work.appendingPathComponent("Dwn-mac.zip")
             try await download(zipURL, to: zip)
 
@@ -150,7 +193,6 @@ final class Updater: ObservableObject {
                 guard expected == actual else { throw APIError(message: "The update didn't download intact. Try again.") }
             }
 
-            phase = .installing
             try run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path])
             let newApp = work.appendingPathComponent("Dwn.app")
             guard let plist = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")),
@@ -162,29 +204,72 @@ final class Updater: ObservableObject {
             }
             try? run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", newApp.path])
 
-            // Swap the app once Dwn has quit, then reopen it.
-            let script = work.appendingPathComponent("swap.sh")
-            try """
-            #!/bin/sh
-            while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
-            rm -rf "\(target.path).old"
-            mv "\(target.path)" "\(target.path).old" && mv "\(newApp.path)" "\(target.path)" && rm -rf "\(target.path).old"
-            open "\(target.path)"
-            rm -rf "\(work.path)"
-            """.write(to: script, atomically: true, encoding: .utf8)
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/bin/sh")
-            p.arguments = [script.path]
-            try p.run()
+            discardStaged()
+            try FileManager.default.createDirectory(at: stageDir, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: newApp, to: stagedApp)
+            stagedVersion = rel.version
+            phase = .ready
+            return true
+        } catch {
+            phase = .failed(error.localizedDescription)
+            return false
+        }
+    }
+
+    private func discardStaged() {
+        try? FileManager.default.removeItem(at: stagedApp)
+        stagedVersion = nil
+    }
+
+    // MARK: install
+
+    /// "Update and restart": make sure the newest version is staged, then swap and relaunch.
+    func install() async {
+        let target = Bundle.main.bundleURL
+        guard FileManager.default.isWritableFile(atPath: target.deletingLastPathComponent().path),
+              target.pathExtension == "app" else {
+            phase = .failed("This copy can't update itself where it is. The download page opens instead.")
+            NSWorkspace.shared.open(latest?.page ?? URL(string: "https://github.com/\(repo)/releases/latest")!)
+            return
+        }
+        // Re-check right now: if a newer release came out since the last check, get that one.
+        guard await stageNewest(), isReady else { return }
+        phase = .installing
+        do {
+            try launchSwap(relaunch: true)
             showSheet = false
-            // Quit so the script can swap the app. If anything still holds the
-            // app open after a few seconds, exit anyway: the engine stops on its own
-            // when our end of its stdin closes.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { quitDwn() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { quitDwn(force: true) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { exit(0) }
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Called as Dwn quits for real: install a waiting update without reopening.
+    func installOnQuit() {
+        guard autoInstall, isReady, let v = stagedVersion, Self.isNewer(v, than: current),
+              FileManager.default.fileExists(atPath: stagedApp.path) else { return }
+        try? launchSwap(relaunch: false)
+    }
+
+    /// A small script that waits for Dwn to exit, swaps in the staged app and optionally reopens it.
+    private func launchSwap(relaunch: Bool) throws {
+        let target = Bundle.main.bundleURL
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent("dwn-swap-\(UUID().uuidString).sh")
+        try """
+        #!/bin/sh
+        while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
+        [ -d "\(stagedApp.path)" ] || exit 1
+        rm -rf "\(target.path).old"
+        mv "\(target.path)" "\(target.path).old" && mv "\(stagedApp.path)" "\(target.path)" && rm -rf "\(target.path).old"
+        defaults delete \(Bundle.main.bundleIdentifier ?? "com.yuvrajgarg.dwn") updateStagedVersion 2>/dev/null
+        \(relaunch ? "open \"\(target.path)\"" : "")
+        rm -f "$0"
+        """.write(to: script, atomically: true, encoding: .utf8)
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = [script.path]
+        try p.run()
     }
 
     /// Downloads with a native URLSession download task: full network speed,

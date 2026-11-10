@@ -401,6 +401,8 @@ final class AppModel: ObservableObject {
 
     func showMainWindow() {
         quickPanel.hide()
+        // Coming back from the background: bring the Dock icon back too (unless it's hidden in Settings).
+        if !hideDock && NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
         NSApp.activate(ignoringOtherApps: true)
         if let w = NSApp.windows.first(where: { ($0.identifier?.rawValue.hasPrefix("main") ?? false) && $0.canBecomeMain }) {
             w.makeKeyAndOrderFront(nil)

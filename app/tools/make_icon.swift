@@ -1,6 +1,6 @@
 // Renders Dwn's icons from the "dwn↓" wordmark.
 //   swift make_icon.swift icon <out.iconset>   macOS app icon: dark tile, white wordmark
-//   swift make_icon.swift tray <out dir>       Windows tray: wordmark in white and black, 1x and 2x
+//   swift make_icon.swift tray <out dir>       Windows tray: download symbol in white and black, 1x and 2x
 import AppKit
 import CoreText
 
@@ -93,16 +93,29 @@ func appIcon(_ px: Int) -> Data {
     }
 }
 
-/// Tray icon for Windows: just the wordmark, fitted to a square.
+/// Download symbol (arrow into an open tray) on an 18-unit grid, y-up.
+/// Same drawing as DownloadGlyph in the app's StatusItem.swift.
+func downloadGlyph(_ cg: CGContext, size: CGFloat, color: CGColor) {
+    let k = size / 18
+    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * k, y: (18 - y) * k) }
+    cg.setStrokeColor(color)
+    cg.setLineWidth(1.75 * k)
+    cg.setLineCap(.round)
+    cg.setLineJoin(.round)
+    cg.move(to: pt(9, 2.6)); cg.addLine(to: pt(9, 11.2))
+    cg.move(to: pt(5.4, 7.8)); cg.addLine(to: pt(9, 11.4)); cg.addLine(to: pt(12.6, 7.8))
+    cg.move(to: pt(3, 11.6)); cg.addLine(to: pt(3, 13.6))
+    cg.addQuadCurve(to: pt(4.8, 15.4), control: pt(3, 15.4))
+    cg.addLine(to: pt(13.2, 15.4))
+    cg.addQuadCurve(to: pt(15, 13.6), control: pt(15, 15.4))
+    cg.addLine(to: pt(15, 11.6))
+    cg.strokePath()
+}
+
+/// Tray icon for Windows: the download symbol, no background.
 func trayIcon(_ px: Int, white: Bool) -> Data {
     bitmap(px, px) { cg in
-        let s = CGFloat(px)
-        let color = white ? NSColor.white.cgColor : NSColor.black.cgColor
-        var size = s * 0.5
-        let w = drawWordmark(cg, x: 0, baseline: 0, size: size, color: color, draw: false)
-        size *= (s * 0.98) / w
-        let w2 = drawWordmark(cg, x: 0, baseline: 0, size: size, color: color, draw: false)
-        drawWordmark(cg, x: (s - w2) / 2, baseline: s / 2 - size * 0.36, size: size, color: color)
+        downloadGlyph(cg, size: CGFloat(px), color: white ? NSColor.white.cgColor : NSColor.black.cgColor)
     }
 }
 
