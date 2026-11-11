@@ -2,7 +2,7 @@
 
 **Download anything on the internet.** Videos, songs, playlists and transcripts from YouTube, TikTok, Instagram, X, SoundCloud and over a thousand other sites — straight to your computer. No accounts, no servers.
 
-Dwn is a desktop app for **macOS** (native SwiftUI) and **Windows** (Electron). Both run the same local download engine built on [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org).
+Dwn is a desktop app for **macOS** (native SwiftUI) and **Windows** (Electron). Both run the same local download engine built on [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org) and, for cloud drives, [rclone](https://rclone.org).
 
 ## Download
 
@@ -20,6 +20,7 @@ Dwn checks this repository's releases for updates, notifies you when a new versi
 - **Paste and go** — paste a link, or drop one anywhere in the window. YouTube previews appear instantly.
 - **Formats** — H.264, HEVC, ProRes or the original file for video (up to 4K/8K); MP3, AAC or WAV for audio; transcripts from captions.
 - **Sections** — trim before you download with a filmstrip timeline, frame-accurate start/end, chapters and "most replayed".
+- **Cloud drives** — a Cloud tab for Google Drive, Dropbox, OneDrive, Box and pCloud: browse your files, everything shared with you (grouped by person) and shared folder links, then drag whole folders to your computer. They download file by file, never as Google Drive's split 2 GB zips. Drag files the other way to upload.
 - **Bulk download** — paste many links or a text/CSV file; playlists, albums and channels expand automatically.
 - **Quick download panel** — a global shortcut (⌥⌘D / Alt+Shift+D, customizable) opens a small panel over any app with the copied link ready.
 - **Menu bar / system tray** — keep Dwn one click away, even with the window closed.
@@ -41,7 +42,7 @@ VERSION    the app version used by builds
 
 ## Building
 
-**macOS** (needs Xcode or the Command Line Tools, [uv](https://docs.astral.sh/uv/) and FFmpeg):
+**macOS** (needs Xcode or the Command Line Tools, [uv](https://docs.astral.sh/uv/), FFmpeg and, for the Cloud tab, rclone — `brew install rclone`):
 
 ```bash
 ./build.sh --install        # builds dist/Dwn.app and copies it to ~/Applications
@@ -67,4 +68,4 @@ Dwn is for downloading content you have the right to download — your own uploa
 
 ## License
 
-[MIT](LICENSE). Dwn bundles yt-dlp (Unlicense), FFmpeg (GPL builds) and Deno (MIT) in its release builds.
+[MIT](LICENSE). Dwn bundles yt-dlp (Unlicense), FFmpeg (GPL builds), Deno (MIT) and rclone (MIT) in its release builds.

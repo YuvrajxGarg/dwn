@@ -42,13 +42,16 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Set version
         run: echo "${TAG#v}" > VERSION
-      - name: Portable ffmpeg and deno
+      - name: Portable ffmpeg, deno and rclone
         run: |
           mkdir -p tools
           curl -fsSL -o ffmpeg.zip  "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
           curl -fsSL -o deno.zip    "https://github.com/denoland/deno/releases/latest/download/deno-aarch64-apple-darwin.zip"
+          curl -fsSL -o rclone.zip  "https://downloads.rclone.org/rclone-current-osx-arm64.zip"
           unzip -o ffmpeg.zip -d tools && unzip -o deno.zip -d tools
+          unzip -o rclone.zip -d rclone && cp rclone/*/rclone tools/
           chmod +x tools/*
+          tools/rclone version | head -1
           tools/ffmpeg -hide_banner -version | head -1
           tools/ffmpeg -hide_banner -encoders | grep -E 'h264_videotoolbox|hevc_videotoolbox|prores_videotoolbox'
           tools/deno --version | head -1
@@ -74,6 +77,9 @@ jobs:
           echo "DWN_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
           echo "DWN_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build
+        env:
+          DWN_GOOGLE_CLIENT_ID: ${{ secrets.DWN_GOOGLE_CLIENT_ID }}
+          DWN_GOOGLE_CLIENT_SECRET: ${{ secrets.DWN_GOOGLE_CLIENT_SECRET }}
         run: DWN_TOOLS="$PWD/tools" ./build.sh --release
       - name: Check the signature
         run: |
@@ -108,13 +114,22 @@ jobs:
           .venv/Scripts/pyinstaller.exe --noconfirm --clean --log-level WARN --onedir --name dwn-engine \
             --collect-all yt_dlp --collect-all yt_dlp_ejs --collect-submodules mutagen \
             --distpath build/dist --workpath build/work --specpath build engine.py
-      - name: Portable ffmpeg and deno
+      - name: Portable ffmpeg, deno and rclone
+        env:
+          DWN_GOOGLE_CLIENT_ID: ${{ secrets.DWN_GOOGLE_CLIENT_ID }}
+          DWN_GOOGLE_CLIENT_SECRET: ${{ secrets.DWN_GOOGLE_CLIENT_SECRET }}
         run: |
           mkdir -p engine/build/dist/dwn-engine/bin
           curl -fsSL -o ffmpeg.zip "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
           curl -fsSL -o deno.zip   "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
-          unzip -q ffmpeg.zip -d ffmpeg && unzip -q deno.zip -d deno
-          cp ffmpeg/*/bin/ffmpeg.exe deno/deno.exe engine/build/dist/dwn-engine/bin/
+          curl -fsSL -o rclone.zip "https://downloads.rclone.org/rclone-current-windows-amd64.zip"
+          unzip -q ffmpeg.zip -d ffmpeg && unzip -q deno.zip -d deno && unzip -q rclone.zip -d rclone
+          cp ffmpeg/*/bin/ffmpeg.exe deno/deno.exe rclone/*/rclone.exe engine/build/dist/dwn-engine/bin/
+          engine/build/dist/dwn-engine/bin/rclone.exe version | head -1
+          if [ -n "$DWN_GOOGLE_CLIENT_ID" ]; then
+            printf '{"drive": {"id": "%s", "secret": "%s"}}\n' "$DWN_GOOGLE_CLIENT_ID" "$DWN_GOOGLE_CLIENT_SECRET" \
+              > engine/build/dist/dwn-engine/cloud_clients.json
+          fi
           engine/build/dist/dwn-engine/bin/ffmpeg.exe -hide_banner -version | head -1
       - name: Smoke-test the engine
         run: |
@@ -122,6 +137,7 @@ jobs:
           for i in $(seq 1 30); do sleep 1; grep -q READY engine.out && break; done
           cat engine.out
           curl -fsS -H 'X-Dwn-Token: t' http://127.0.0.1:8765/health
+          curl -fsS -H 'X-Dwn-Token: t' http://127.0.0.1:8765/cloud/status | grep -q '"available": true'
           taskkill //F //IM dwn-engine.exe || true
       - name: Build the installer
         working-directory: windows

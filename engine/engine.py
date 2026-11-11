@@ -135,6 +135,11 @@ prefs = {**DEFAULT_PREFS, **load_json(PREFS_PATH, {})}
 history: list[dict] = load_json(HISTORY_PATH, [])
 
 
+import cloud  # noqa: E402
+
+cloud.setup(which=which, support=SUPPORT, cache=CACHE, log=log, prefs=prefs)
+
+
 def save_prefs():
     save_json(PREFS_PATH, prefs)
 
@@ -1127,6 +1132,8 @@ class Handler(BaseHTTPRequestHandler):
             return test_browser_login(b.get("browser") or prefs.get("browser_cookies") or "chrome")
         if path == "/update-ytdlp":
             return update_ytdlp()
+        if path.startswith("/cloud/"):
+            return cloud.dispatch(method, path, b)
         raise KeyError(path)
 
 
@@ -1137,6 +1144,7 @@ def watch_stdin():
             pass
     except Exception:
         pass
+    cloud.shutdown()
     os._exit(0)
 
 
@@ -1144,6 +1152,13 @@ def main():
     port = int(os.environ.get("DWN_PORT") or 0)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
+    # Take rclone down with the engine when the app stops it.
+    import signal
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, lambda *_: (cloud.shutdown(), os._exit(0)))
+        except (ValueError, OSError):
+            pass
     if os.environ.get("DWN_WATCH_STDIN", "1") == "1":
         threading.Thread(target=watch_stdin, daemon=True).start()
     print(f"DWN_ENGINE_READY {server.server_address[1]}", flush=True)

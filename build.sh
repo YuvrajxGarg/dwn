@@ -4,7 +4,7 @@
 #   ./build.sh --install   also copy to ~/Applications
 #   ./build.sh --release   also write dist/Dwn-mac.zip and dist/Dwn-mac.zip.sha256
 #
-# Tools: ffmpeg and deno are taken from $DWN_TOOLS (a folder) when set, and
+# Tools: ffmpeg, deno and rclone are taken from $DWN_TOOLS (a folder) when set, and
 # bundled into the app so it runs on any Mac. Without it, the engine falls back
 # to Homebrew's copies at runtime.
 set -euo pipefail
@@ -24,6 +24,12 @@ if [[ -n "${DWN_TOOLS:-}" ]]; then
   mkdir -p $ROOT/engine/build/dist/dwn-engine/bin
   cp $DWN_TOOLS/* $ROOT/engine/build/dist/dwn-engine/bin/
   chmod +x $ROOT/engine/build/dist/dwn-engine/bin/*
+fi
+
+# Dwn's own Google sign-in app, so Drive isn't rate-limited like rclone's shared one.
+if [[ -n "${DWN_GOOGLE_CLIENT_ID:-}" ]]; then
+  printf '{"drive": {"id": "%s", "secret": "%s"}}\n' "$DWN_GOOGLE_CLIENT_ID" "${DWN_GOOGLE_CLIENT_SECRET:-}" \
+    > $ROOT/engine/build/dist/dwn-engine/cloud_clients.json
 fi
 
 echo "==> App"

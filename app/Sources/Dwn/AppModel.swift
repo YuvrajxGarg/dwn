@@ -33,6 +33,10 @@ final class AppModel: ObservableObject {
         }
     }
     @Published var showSignIn = false
+    /// Main window section: "download" (links) or "cloud" (Google Drive, Dropbox…).
+    @Published var section = UserDefaults.standard.string(forKey: "section") ?? "download" {
+        didSet { UserDefaults.standard.set(section, forKey: "section") }
+    }
     @Published var sectionChoice: SectionChoice?
     @Published var freeBytes: Int64?
     @Published var hotkeyEnabled = UserDefaults.standard.object(forKey: "hotkey") as? Bool ?? true {
@@ -64,6 +68,7 @@ final class AppModel: ObservableObject {
     lazy var quickPanel = QuickPanelController(model: self)
     lazy var statusItem = StatusItemController(model: self)
     let updater = Updater()
+    lazy var cloud = CloudModel(app: self)
 
     private var signInPromptShown = false
     private var started = false
@@ -107,6 +112,9 @@ final class AppModel: ObservableObject {
             startPolling()
             // Test hook: open a sheet at launch (used to check quitting with a sheet open).
             if ProcessInfo.processInfo.environment["DWN_TEST_OPEN_SHEET"] != nil { onboarded = true; showBulk = true }
+            // Test hook: start with a link in the box (used for website screenshots).
+            if let link = ProcessInfo.processInfo.environment["DWN_TEST_LINK"] { composerText = link }
+            if let s = ProcessInfo.processInfo.environment["DWN_TEST_SECTION"] { section = s }
         }
     }
 

@@ -43,16 +43,34 @@ struct MainView: View {
     @Local private var dropHover = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar()
-                .frame(width: 368)
-                .background(Theme.sidebar)
-            Rectangle().fill(Theme.stroke).frame(width: 1)
-            DownloadsView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if model.section == "cloud" {
+                CloudView(cloud: model.cloud)
+            } else {
+                HStack(spacing: 0) {
+                    Sidebar()
+                        .frame(width: 368)
+                        .background(Theme.sidebar)
+                    Rectangle().fill(Theme.stroke).frame(width: 1)
+                    DownloadsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
         }
+        // Swap sections instantly: the tab pill slides, the content doesn't
+        // (animating it made the whole window drop and settle).
+        .transaction(value: model.section) { $0.animation = nil }
         .background(Theme.bg)
         .ignoresSafeArea()
+        .overlay(alignment: .topLeading) {
+            // Beside the window's traffic lights, in the same place in both sections.
+            DwnTabs(items: [TabItem(id: "download", title: "Links", icon: "arrow.down"),
+                            TabItem(id: "cloud", title: "Cloud", icon: "cloud")],
+                    selection: $model.section, height: 30)
+                .frame(width: 162)
+                .padding(.leading, 82).padding(.top, 8)
+                .ignoresSafeArea()
+        }
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 8) {
                 Button { model.openFolder() } label: { Image(systemName: "folder") }
@@ -81,7 +99,7 @@ struct MainView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: dropHover)
-        .onDrop(of: [.url, .plainText, .fileURL], isTargeted: $dropHover) { handleDrop($0) }
+        .onDrop(of: model.section == "cloud" ? [] : [.url, .plainText, .fileURL], isTargeted: $dropHover) { handleDrop($0) }
         .sheet(isPresented: $model.showBulk) { BulkView(prefill: model.bulkPrefill) }
         .sheet(isPresented: $model.showSignIn) { SignInSheet() }
         .modifier(UpdateSheetHost(updater: model.updater))
@@ -138,7 +156,7 @@ struct Sidebar: View {
                     ComposerView()
                     BulkCard()
                 }
-                .padding(.top, 40)
+                .padding(.top, 48)
                 .padding(.horizontal, 14)
             }
             Footer().padding(.horizontal, 20).padding(.bottom, 14)
