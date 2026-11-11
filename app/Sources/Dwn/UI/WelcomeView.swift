@@ -1,14 +1,14 @@
 import SwiftUI
 import UserNotifications
 
-/// First-run setup: intro, default formats, save folder, YouTube sign-in, quick download.
+/// First-run setup: intro, default formats, save folder, YouTube sign-in, quick download, cloud drives.
 struct WelcomeView: View {
     @EnvironmentObject var model: AppModel
     @Local private var step = 0
     @Local private var forward = true
     @Local private var notifStatus: UNAuthorizationStatus = .notDetermined
 
-    private let steps = ["Welcome", "Formats", "Folder", "Sign in", "Shortcuts", "Done"]
+    private let steps = ["Welcome", "Formats", "Folder", "Sign in", "Shortcuts", "Cloud", "Done"]
     private let bookmarklet = "javascript:location.href='dwn://download?url='+encodeURIComponent(location.href)"
 
     var body: some View {
@@ -99,6 +99,7 @@ struct WelcomeView: View {
         case 2: folder
         case 3: signIn
         case 4: shortcuts
+        case 5: cloud
         default: done
         }
     }
@@ -289,6 +290,54 @@ struct WelcomeView: View {
             }
         }
         .padding(.top, 28)
+    }
+
+    private var cloud: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            title("Whole folders from Google Drive and Dropbox",
+                  "Connect an account in the Cloud tab to see your files and everything shared with you, grouped by person. Drag a folder to your Mac and it arrives file by file, never as split 2 GB zips.")
+            // A small picture of the Cloud tab: this Mac on the left, the cloud on the right.
+            HStack(spacing: 10) {
+                miniPane(icon: AnyView(Image(systemName: "laptopcomputer").font(.ui(12, .medium)).foregroundStyle(Theme.text2)),
+                         title: "This Mac", rows: [("Client Footage 2026", true), ("A001_C004.mov", false)])
+                Image(systemName: "arrow.left").font(.ui(13, .bold)).foregroundStyle(Theme.accent)
+                miniPane(icon: AnyView(ServiceIcon(type: "drive", size: 20)),
+                         title: "Shared with me", rows: [("Client Footage 2026", true), ("Wedding RAW", true)])
+            }
+            HStack(spacing: 8) {
+                ForEach(["drive", "dropbox", "onedrive", "box", "pcloud"], id: \.self) { ServiceIcon(type: $0, size: 24) }
+                Text("Google Drive, Dropbox, OneDrive, Box and pCloud").font(.ui(12)).foregroundStyle(Theme.text3)
+                    .padding(.leading, 4)
+            }
+            Button {
+                model.section = "cloud"
+                finish()
+            } label: { Label("Open the Cloud tab", systemImage: "cloud") }
+                .buttonStyle(QuietButtonStyle(height: 34))
+        }
+        .padding(.top, 28)
+    }
+
+    private func miniPane(icon: AnyView, title: String, rows: [(String, Bool)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                icon
+                Text(title).font(.ui(12.5, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+            }
+            ForEach(rows, id: \.0) { r in
+                HStack(spacing: 8) {
+                    Image(systemName: r.1 ? "folder.fill" : "film").font(.ui(10.5))
+                        .foregroundStyle(r.1 ? Theme.accent : Theme.text3)
+                        .frame(width: 22, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(r.1 ? Theme.accent.opacity(0.10) : Color.white.opacity(0.06)))
+                    Text(r.0).font(.ui(11.5, .medium)).foregroundStyle(Theme.text2).lineLimit(1)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(radius: 14)
     }
 
     private var done: some View {

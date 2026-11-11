@@ -41,6 +41,9 @@ struct RootView: View {
 struct MainView: View {
     @EnvironmentObject var model: AppModel
     @Local private var dropHover = false
+    /// The switch's own selection. Its pill animates; the section it picks is
+    /// applied separately, with animations off, so the screen swaps in place.
+    @Local private var tab = ""
 
     var body: some View {
         Group {
@@ -57,16 +60,13 @@ struct MainView: View {
                 }
             }
         }
-        // Swap sections instantly: the tab pill slides, the content doesn't
-        // (animating it made the whole window drop and settle).
-        .transaction(value: model.section) { $0.animation = nil }
         .background(Theme.bg)
         .ignoresSafeArea()
         .overlay(alignment: .topLeading) {
             // Beside the window's traffic lights, in the same place in both sections.
             DwnTabs(items: [TabItem(id: "download", title: "Links", icon: "arrow.down"),
                             TabItem(id: "cloud", title: "Cloud", icon: "cloud")],
-                    selection: $model.section, height: 30)
+                    selection: $tab, height: 30)
                 .frame(width: 162)
                 .padding(.leading, 82).padding(.top, 8)
                 .ignoresSafeArea()
@@ -100,6 +100,20 @@ struct MainView: View {
         }
         .animation(.easeOut(duration: 0.15), value: dropHover)
         .onDrop(of: model.section == "cloud" ? [] : [.url, .plainText, .fileURL], isTargeted: $dropHover) { handleDrop($0) }
+        .onAppear { tab = model.section }
+        .onChange(of: tab) { _, v in
+            guard v != model.section, !v.isEmpty else { return }
+            // Swap the screen with no animation at all: carrying the pill's
+            // spring into the content faded and slid the whole window.
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { model.section = v }
+        }
+        .onChange(of: model.section) { _, v in if tab != v { tab = v } }
+        .onReceive(NotificationCenter.default.publisher(for: .init("DwnTestFlipTab"))) { _ in
+            // Same animated change a click on the switch makes (test hook).
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { tab = tab == "cloud" ? "download" : "cloud" }
+        }
         .sheet(isPresented: $model.showBulk) { BulkView(prefill: model.bulkPrefill) }
         .sheet(isPresented: $model.showSignIn) { SignInSheet() }
         .modifier(UpdateSheetHost(updater: model.updater))

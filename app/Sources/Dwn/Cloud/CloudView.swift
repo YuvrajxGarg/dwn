@@ -37,12 +37,12 @@ struct CloudSidebar: View {
                 VStack(spacing: 12) {
                     if !cloud.accounts.isEmpty { accountsCard }
                     if cloud.status?.available == true {
-                        ActionCard(icon: "plus", title: "Add account",
-                                   subtitle: "Google Drive, Dropbox, OneDrive and more") { cloud.showConnect = true }
                         if cloud.accounts.contains(where: { $0.type == "drive" }) {
                             ActionCard(icon: "link", title: "Open a shared link",
-                                       subtitle: "Browse a Drive folder someone sent you") { cloud.showLink = true }
+                                       subtitle: "Paste a Drive folder someone sent you") { cloud.openLinkSheet() }
                         }
+                        ActionCard(icon: "plus", title: "Add account",
+                                   subtitle: "Google Drive, Dropbox, OneDrive and more") { cloud.showConnect = true }
                     }
                 }
                 .padding(.top, 48)
@@ -96,16 +96,10 @@ struct CloudSidebar: View {
                 SidebarRow(icon: viewIcon(v.id), title: v.title,
                            selected: cloud.location?.root == loc) { cloud.open(loc) }
             }
-            ForEach(cloud.links.filter { $0.account == acct.name }) { l in
-                let loc = CloudLocation(account: acct.name, view: "link", link: l.link)
-                SidebarRow(icon: "link", title: l.title, selected: cloud.location?.root == loc) { cloud.open(loc) }
-                    .contextMenu {
-                        Button("Copy Link") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(l.link, forType: .string)
-                        }
-                        Button("Remove from Sidebar") { cloud.removeLink(l) }
-                    }
+            if acct.type == "drive" {
+                let loc = CloudLocation(account: acct.name, view: "links")
+                let here = cloud.location?.account == acct.name && ["links", "link"].contains(cloud.location?.view ?? "")
+                SidebarRow(icon: "link", title: "Shared links", selected: here) { cloud.open(loc) }
             }
             if let u = cloud.usage[acct.name], u.total > 0 {
                 VStack(alignment: .leading, spacing: 6) {
@@ -338,6 +332,7 @@ struct FileRow: View {
     }
 
     private var meta: String {
+        if mime == CloudModel.linkMime { return "Shared link" }
         var parts: [String] = [isDir ? "Folder" : formatBytes(size)]
         if let date { parts.append(shortDate.string(from: date)) }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
@@ -527,6 +522,13 @@ struct RemotePane: View {
     }
     private var selected: [CloudEntry] { cloud.visibleEntries.filter { cloud.selection.contains($0.id) } }
     private var canWrite: Bool { cloud.location?.view == "files" || cloud.location?.view == "link" }
+    private var inLinks: Bool { cloud.location?.view == "links" }
+    @Local private var renaming: SavedLink?
+    @Local private var newName = ""
+
+    private func saved(_ e: CloudEntry) -> SavedLink? {
+        cloud.links.first { $0.account == cloud.location?.account && $0.link == e.path }
+    }
 
     var body: some View {
         PaneCard {
@@ -544,6 +546,10 @@ struct RemotePane: View {
                         Button { folderName = ""; newFolder = true } label: { Image(systemName: "folder.badge.plus") }
                             .buttonStyle(IconButtonStyle(size: 28)).help("New Folder")
                     }
+                    if inLinks {
+                        Button { cloud.showLink = true } label: { Image(systemName: "plus") }
+                            .buttonStyle(IconButtonStyle(size: 28)).help("Add a Shared Link")
+                    }
                 }
                 CrumbBar(crumbs: cloud.crumbs) { cloud.navigate($0) }
             }
@@ -555,6 +561,11 @@ struct RemotePane: View {
         }
         .overlay { if target { DropHighlight(text: canWrite ? "Upload here" : "Open My Drive to upload") } }
         .onDrop(of: [.fileURL, .plainText], isTargeted: $target) { handleDrop($0) }
+        .alert("Rename Link", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Rename") { if let l = renaming { cloud.renameLink(l, to: newName.trimmingCharacters(in: .whitespaces)) } }
+            Button("Cancel", role: .cancel) {}
+        }
         .alert("New Folder", isPresented: $newFolder) {
             TextField("Name", text: $folderName)
             Button("Create") { cloud.newFolder(folderName.trimmingCharacters(in: .whitespaces)) }
@@ -621,6 +632,15 @@ struct RemotePane: View {
                 Divider()
                 Button("Delete…", role: .destructive) { cloud.selection = Set(items.map(\.id)); confirmDelete = true }
             }
+            if inLinks, let l = saved(e) {
+                Divider()
+                Button("Rename…") { newName = l.title; renaming = l }
+                Button("Copy Link") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(l.link, forType: .string)
+                }
+                Button("Remove", role: .destructive) { cloud.removeLink(l) }
+            }
         }
     }
 
@@ -635,6 +655,15 @@ struct RemotePane: View {
                 Button("Try Again") { cloud.reload(force: true) }.buttonStyle(QuietButtonStyle(height: 30))
             }
             .padding(30)
+        } else if inLinks && cloud.visibleEntries.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "link").font(.ui(20, .medium)).foregroundStyle(Theme.text3)
+                Text("Paste a Google Drive folder link someone sent you to keep it here.")
+                    .font(.ui(12.5)).foregroundStyle(Theme.text3).multilineTextAlignment(.center)
+                Button { cloud.showLink = true } label: { Label("Add a link", systemImage: "plus") }
+                    .buttonStyle(QuietButtonStyle(height: 30))
+            }
+            .padding(30)
         } else if shown.isEmpty && cloud.location != nil {
             EmptyPaneText(text: !cloud.filter.isEmpty ? "Nothing matches “\(cloud.filter)”"
                           : (canWrite ? "This folder is empty.\nDrag files here to upload them." : "Nothing here yet."))
@@ -642,6 +671,7 @@ struct RemotePane: View {
     }
 
     private var footerText: String {
+        if inLinks { let n = cloud.visibleEntries.count; return n == 1 ? "1 link" : "\(n) links" }
         if let people = cloud.people { return people.count == 1 ? "1 person" : "\(people.count) people" }
         if !selected.isEmpty {
             let size = selected.compactMap(\.size).reduce(0, +)
@@ -1130,18 +1160,25 @@ struct GoogleAppSection: View {
 struct LinkSheet: View {
     @ObservedObject var cloud: CloudModel
     @Local private var link = ""
+    @Local private var name = ""
     @Local private var account = ""
 
     private var drives: [CloudAccount] { cloud.accounts.filter { $0.type == "drive" } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Open a shared Google Drive folder").font(.ui(17, .bold)).foregroundStyle(Theme.text)
-            Text("Paste a folder link someone sent you. You can browse it and download all of it, without it being split into zips.")
+            Text(cloud.linkSheetOpens ? "Open a shared link" : "Add a shared link").font(.ui(17, .bold)).foregroundStyle(Theme.text)
+            Text("Paste a Google Drive folder link someone sent you. It's kept under Shared links, where you can browse it and download all of it, without it being split into zips.")
                 .font(.ui(12.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Image(systemName: "link").font(.ui(M.icon, .medium)).foregroundStyle(Theme.text3)
                 TextField("", text: $link, prompt: Text("https://drive.google.com/drive/folders/…").foregroundStyle(Theme.text3))
+                    .textFieldStyle(.plain).font(.ui(13)).foregroundStyle(Theme.text)
+            }
+            .padding(.horizontal, 12).frame(height: M.controlLarge).controlFill()
+            HStack(spacing: 8) {
+                Image(systemName: "character.cursor.ibeam").font(.ui(M.icon, .medium)).foregroundStyle(Theme.text3)
+                TextField("", text: $name, prompt: Text("Name, e.g. Wedding footage (optional)").foregroundStyle(Theme.text3))
                     .textFieldStyle(.plain).font(.ui(13)).foregroundStyle(Theme.text)
             }
             .padding(.horizontal, 12).frame(height: M.controlLarge).controlFill()
@@ -1152,8 +1189,8 @@ struct LinkSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel") { cloud.showLink = false }.buttonStyle(QuietButtonStyle(height: 34))
-                Button("Open") {
-                    cloud.addLink(link, account: account.isEmpty ? (drives.first?.name ?? "") : account)
+                Button(cloud.linkSheetOpens ? "Open" : "Add") {
+                    cloud.addLink(link, account: account.isEmpty ? (drives.first?.name ?? "") : account, title: name)
                     cloud.showLink = false
                 }
                 .buttonStyle(PrimaryButtonStyle(height: 34)).frame(width: 96)
@@ -1168,6 +1205,7 @@ struct LinkSheet: View {
             account = drives.first?.name ?? ""
             if let s = NSPasteboard.general.string(forType: .string), s.contains("drive.google.com") { link = s }
         }
+        .onDisappear { cloud.linkSheetOpens = false }
     }
 }
 

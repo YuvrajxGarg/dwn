@@ -9,7 +9,7 @@ const REPO = 'YuvrajxGarg/dwn';
 const SIX_HOURS = 3 * 3600 * 1000; // check every 3 hours
 
 let s = { phase: 'idle', version: null, notes: '', progress: 0, error: null, checkedAt: null, page: null };
-let hooks = { onChange() {}, notify() {} };
+let hooks = { onChange() {}, notify() {}, beforeInstall: async () => {}, installFailed() {} };
 let au = null;
 let installWhenReady = false;
 
@@ -85,7 +85,7 @@ function init(h) {
       au.on('download-progress', (p) => set({ phase: 'downloading', progress: (p.percent || 0) / 100 }));
       au.on('update-downloaded', (info) => {
         set({ phase: 'ready', version: info.version, progress: 1 });
-        if (installWhenReady) { installWhenReady = false; setImmediate(() => au.quitAndInstall(false, true)); }
+        if (installWhenReady) { installWhenReady = false; restartToUpdate(); }
       });
       au.on('error', (e) => set({ phase: 'failed', error: friendly(e) }));
     } catch {
@@ -94,6 +94,23 @@ function init(h) {
   }
   setTimeout(() => { if (settings.get('autoCheckUpdates')) check(false); }, 8000);
   setInterval(() => { if (settings.get('autoCheckUpdates')) check(false); }, SIX_HOURS);
+}
+
+// "Restart to update": install now and open Dwn again afterwards.
+// quitAndInstall(isSilent, isForceRunAfter) ignores isForceRunAfter unless
+// isSilent is true, so it must be (true, true): the installer then runs with
+// /S --force-run, and the NSIS script starts Dwn once the files are in place.
+// Before that, main stops the engine and everything it started (rclone,
+// ffmpeg, yt-dlp): they run from Dwn's install folder, and while any of them
+// is running the installer can't replace its file and gives up.
+let restarting = false;
+async function restartToUpdate() {
+  if (restarting || !au) return;
+  restarting = true;
+  try { await hooks.beforeInstall(); } catch {}
+  au.quitAndInstall(true, true);
+  // Normally Dwn has quit by now. If the installer couldn't start, carry on.
+  setTimeout(() => { restarting = false; hooks.installFailed(); }, 15000).unref();
 }
 
 function friendly(e) {
@@ -136,7 +153,7 @@ async function install() {
     au.autoDownload = !!settings.get('autoInstallUpdates');
   }
   if (readyVersion && (!latest || !newer(latest, readyVersion))) {
-    setImmediate(() => au.quitAndInstall(false, true));
+    restartToUpdate();
     return state();
   }
   installWhenReady = true;
@@ -145,4 +162,4 @@ async function install() {
   return state();
 }
 
-module.exports = { init, check, install, state };
+module.exports = { init, check, install, state, restartToUpdate };

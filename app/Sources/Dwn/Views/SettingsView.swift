@@ -110,6 +110,19 @@ private struct QuickSettings: View {
                 Text("Works in any app. Click the shortcut to record a new one; Delete resets it to ⌥⌘D.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("When a download finishes") {
+                Toggle("Play a sound", isOn: $model.finishSound)
+                Picker("Show the Downloaded panel", selection: $model.finishPanel) {
+                    ForEach(PanelCorner.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                HStack {
+                    Text("Appears while Dwn is in the background. Drag a file from it straight into any app.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Preview") { model.previewFinishedPanel() }
+                        .disabled(model.finishPanel == PanelCorner.off.rawValue)
+                }
+            }
             Section("Menu bar") {
                 Toggle("Show Dwn in the menu bar", isOn: $model.menuBarEnabled)
                 Toggle("Hide the Dock icon", isOn: $model.hideDock)

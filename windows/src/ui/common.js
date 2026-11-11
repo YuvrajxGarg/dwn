@@ -77,6 +77,21 @@ const ICONS = {
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   copy: 'M8 8h12v12H8zM4 16V4h12',
   tray: 'M3 13h5l1 3h6l1-3h5M5 5h14l2 8v6H3v-6z',
+  up: 'M12 20V6M6 12l6-6 6 6',
+  cloud: 'M7 18.5a4.5 4.5 0 0 1-.4-9 6 6 0 0 1 11.5 1.2A4 4 0 0 1 17.5 18.5z',
+  plus: 'M12 5v14M5 12h14',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  monitor: 'M3 4h18v12H3zM8 20h8M12 16v4',
+  folderplus: 'M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM12 10v6M9 13h6',
+  users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 7.5M18 14.5a6 6 0 0 1 4 6.5',
+  file: 'M6 3h8l5 5v13H6zM14 3v5h5',
+  sheet: 'M4 4h16v16H4zM4 10h16M4 15h16M10 4v16',
+  archive: 'M4 4h16v5H4zM5 9v11h14V9M10 13h4',
+  triangle: 'M12 4l9 15H3z',
+  box: 'M3 7.5l9-4.5 9 4.5-9 4.5zM3 7.5v9l9 4.5 9-4.5v-9M12 12v9',
+  square: 'M5 5h14v14H5z',
+  arrowur: 'M7 17L17 7M8 7h9v9',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
 };
 function icon(name, cls = '') {
   const ns = 'http://www.w3.org/2000/svg';

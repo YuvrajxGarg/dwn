@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ServiceManagement
 import Foundation
 import UserNotifications
@@ -69,6 +70,15 @@ final class AppModel: ObservableObject {
     lazy var statusItem = StatusItemController(model: self)
     let updater = Updater()
     lazy var cloud = CloudModel(app: self)
+    let finishedPanel = FinishedPanelController()
+    /// Play a sound when a download finishes.
+    @Published var finishSound = UserDefaults.standard.object(forKey: "finishSound") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(finishSound, forKey: "finishSound") }
+    }
+    /// Where the "Downloaded" panel appears (a PanelCorner), or "off".
+    @Published var finishPanel = UserDefaults.standard.string(forKey: "finishPanel") ?? PanelCorner.topRight.rawValue {
+        didSet { UserDefaults.standard.set(finishPanel, forKey: "finishPanel") }
+    }
 
     private var signInPromptShown = false
     private var started = false
@@ -115,6 +125,16 @@ final class AppModel: ObservableObject {
             // Test hook: start with a link in the box (used for website screenshots).
             if let link = ProcessInfo.processInfo.environment["DWN_TEST_LINK"] { composerText = link }
             if let s = ProcessInfo.processInfo.environment["DWN_TEST_SECTION"] { section = s }
+            if ProcessInfo.processInfo.environment["DWN_TEST_FINISHED_PANEL"] != nil { previewFinishedPanel() }
+            // Test hook: flip between Links and Cloud the way the tab switch does, to catch layout jumps.
+            if ProcessInfo.processInfo.environment["DWN_TEST_TOGGLE_SECTION"] != nil {
+                Task { @MainActor in
+                    for _ in 0..<6 {
+                        try? await Task.sleep(for: .seconds(2.5))
+                        NotificationCenter.default.post(name: .init("DwnTestFlipTab"), object: nil)
+                    }
+                }
+            }
         }
     }
 
@@ -158,12 +178,35 @@ final class AppModel: ObservableObject {
     }
 
     private func notifyFinished(_ j: Job) {
+        downloadFinished(id: j.id, title: j.title, file: j.file, thumbnail: j.thumbnail)
+    }
+
+    /// Every finished download, from a link or the cloud, comes through here:
+    /// a sound, and while Dwn is in the background the "Downloaded" panel
+    /// (or a notification when the panel is turned off).
+    /// Shows the panel with the most recent download, for Settings' Preview button.
+    func previewFinishedPanel() {
+        if finishSound { NSSound(named: "Glass")?.play() }
+        let recent = history.first { $0.file.map { FileManager.default.fileExists(atPath: $0) } ?? false }
+        let file = recent?.file ?? prefs.folder
+        finishedPanel.show(FinishedItem(title: recent?.title ?? "Your downloads", file: URL(fileURLWithPath: file),
+                                        thumbnail: recent?.thumbnail),
+                           corner: PanelCorner(rawValue: finishPanel) ?? .topRight)
+    }
+
+    func downloadFinished(id: String, title: String, file: String?, thumbnail: String? = nil) {
+        if finishSound { NSSound(named: "Glass")?.play() }
         guard !NSApp.isActive else { return }
+        let corner = PanelCorner(rawValue: finishPanel) ?? .topRight
+        if corner != .off, let file, FileManager.default.fileExists(atPath: file) {
+            finishedPanel.show(FinishedItem(title: title, file: URL(fileURLWithPath: file), thumbnail: thumbnail), corner: corner)
+            return
+        }
         let c = UNMutableNotificationContent()
         c.title = "Downloaded"
-        c.body = j.title
-        c.userInfo = ["file": j.file ?? ""]
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: j.id, content: c, trigger: nil))
+        c.body = title
+        c.userInfo = ["file": file ?? ""]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c, trigger: nil))
     }
 
     // MARK: prefs

@@ -266,10 +266,27 @@ final class CloudModel: ObservableObject {
         reload()
     }
 
+    /// The link sheet was opened from the sidebar's "Open a shared link" card:
+    /// the link opens straight away (it's saved under Shared links too).
+    @Published var linkSheetOpens = false
+    func openLinkSheet() { linkSheetOpens = true; showLink = true }
+
+    /// A Drive account's saved shared links, shown as folders in the "Shared links" view.
+    static let linkMime = "dwn/shared-link"
+    func linkEntries(_ account: String) -> [CloudEntry] {
+        links.filter { $0.account == account }
+            .map { CloudEntry(name: $0.title, path: $0.link, isDir: true, mime: Self.linkMime) }
+    }
+
     func reload(force: Bool = false) {
         guard let loc = location, let api = app.api else { return }
         listTask?.cancel()
         listError = nil
+        if loc.view == "links" {   // saved in Dwn, nothing to ask the engine
+            loading = false
+            entries = linkEntries(loc.account)
+            return
+        }
         let key = CloudLocation(account: loc.account, view: loc.view, link: loc.link, path: loc.path)
         if let hit = cache[key], !force { entries = hit } else { entries = []; loading = true }
         listTask = Task {
@@ -312,6 +329,10 @@ final class CloudModel: ObservableObject {
 
     func enter(_ e: CloudEntry) {
         guard e.isDir, var loc = location else { return }
+        if loc.view == "links" {
+            open(CloudLocation(account: loc.account, view: "link", link: e.path))
+            return
+        }
         loc.path = e.path
         open(loc)
     }
@@ -326,6 +347,7 @@ final class CloudModel: ObservableObject {
         guard var loc = location else { return }
         if loc.path.isEmpty {
             if loc.owner != nil { loc.owner = nil; location = loc }
+            else if loc.view == "link" { open(CloudLocation(account: loc.account, view: "links")) }
             return
         }
         loc.path = (loc.path as NSString).deletingLastPathComponent
@@ -336,7 +358,9 @@ final class CloudModel: ObservableObject {
     var crumbs: [(String, CloudLocation)] {
         guard let loc = location, let acct = account(loc.account) else { return [] }
         var out: [(String, CloudLocation)] = []
+        if loc.view == "link" { out.append(("Shared links", CloudLocation(account: loc.account, view: "links"))) }
         let rootTitle = loc.view == "link" ? (links.first { $0.link == loc.link }?.title ?? "Shared link")
+            : loc.view == "links" ? "Shared links"
             : (acct.views.first { $0.id == loc.view }?.title ?? "Files")
         out.append((rootTitle, loc.root))
         if let o = loc.owner {
@@ -456,24 +480,31 @@ final class CloudModel: ObservableObject {
         }
     }
 
-    func addLink(_ link: String, account: String) {
+    func addLink(_ link: String, account: String, title: String = "") {
         let t = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        let n = links.filter { $0.account == account }.count + 1
-        let saved = links.first { $0.link == t && $0.account == account }
-            ?? SavedLink(account: account, link: t, title: "Shared link \(n)")
-        if !links.contains(saved) { links.append(saved) }
-        open(CloudLocation(account: account, view: "link", link: t))
+        let name = title.trimmingCharacters(in: .whitespaces)
+        if let i = links.firstIndex(where: { $0.link == t && $0.account == account }) {
+            if !name.isEmpty { links[i].title = name }
+        } else {
+            links.append(SavedLink(account: account, link: t, title: name.isEmpty ? "Shared link \(links.count + 1)" : name))
+        }
+        if location?.view == "links" && location?.account == account && !linkSheetOpens { reload() }
+        else { open(CloudLocation(account: account, view: "link", link: t)) }
+        linkSheetOpens = false
     }
+
 
     func renameLink(_ l: SavedLink, to title: String) {
         guard let i = links.firstIndex(of: l), !title.isEmpty else { return }
         links[i].title = title
+        if location?.view == "links" { reload() }
     }
 
     func removeLink(_ l: SavedLink) {
         links.removeAll { $0 == l }
-        if location?.view == "link" && location?.link == l.link { location = location.map { CloudLocation(account: $0.account) }; reload() }
+        if location?.view == "links" { reload() }
+        if location?.view == "link" && location?.link == l.link { open(CloudLocation(account: l.account, view: "links")) }
     }
 
     private static func loadLinks() -> [SavedLink] {
@@ -486,6 +517,10 @@ final class CloudModel: ObservableObject {
     /// Copy cloud items into a folder on this computer (the local pane's folder by default).
     func download(_ items: [CloudEntry], from loc: CloudLocation, to folder: URL? = nil) {
         guard let api = app.api else { return }
+        if loc.view == "links" {   // each saved link is a whole shared folder
+            for e in items { download([], from: CloudLocation(account: loc.account, view: "link", link: e.path), to: folder) }
+            return
+        }
         var list = items
         // Nothing picked inside a folder: take the whole folder you're looking at.
         if list.isEmpty {
@@ -549,6 +584,10 @@ final class CloudModel: ObservableObject {
     }
 
     private func notifyFinished(_ t: CloudTransfer) {
+        if t.direction == "down" {
+            app.downloadFinished(id: t.id, title: t.name, file: t.local)
+            return
+        }
         guard !NSApp.isActive else { return }
         let c = UNMutableNotificationContent()
         c.title = t.direction == "down" ? "Downloaded from the cloud" : "Uploaded"

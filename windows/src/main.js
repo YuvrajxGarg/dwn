@@ -8,7 +8,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const settings = require('./settings');
 const updater = require('./updater');
 
@@ -20,13 +20,27 @@ const RES = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..', 
 app.setPath('userData', path.join(app.getPath('appData'), 'Dwn', 'App'));
 const SNAPSHOT = process.env.DWN_SNAPSHOT || '';
 
-if (!app.requestSingleInstanceLock()) {
+// After an update the installer starts the new Dwn with --updated, possibly
+// while the old copy is still shutting down. Give it a few seconds to let go
+// of the single-instance lock instead of quitting straight away.
+function singleInstanceLock() {
+  if (app.requestSingleInstanceLock()) return true;
+  if (!process.argv.includes('--updated')) return false;
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (let i = 0; i < 40; i++) {
+    Atomics.wait(nap, 0, 0, 250);
+    if (app.requestSingleInstanceLock()) return true;
+  }
+  return false;
+}
+if (!singleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
 
 let mainWin = null;
 let panelWin = null;
+let doneWin = null;
 let tray = null;
 let quitting = false;
 
@@ -47,8 +61,9 @@ const engine = {
       const exe = path.join(process.resourcesPath, 'engine', IS_WIN ? 'dwn-engine.exe' : 'dwn-engine');
       return fs.existsSync(exe) ? [exe, []] : null;
     }
-    // Development: run engine.py with the repo's virtualenv.
-    const script = path.join(__dirname, '..', '..', 'engine', 'engine.py');
+    // Development: run engine.py with the repo's virtualenv. DWN_ENGINE_SCRIPT
+    // points at another script instead (e.g. one that patches in demo data).
+    const script = process.env.DWN_ENGINE_SCRIPT || path.join(__dirname, '..', '..', 'engine', 'engine.py');
     const venv = path.join(__dirname, '..', '..', 'engine', '.venv');
     const py = IS_WIN ? path.join(venv, 'Scripts', 'python.exe') : path.join(venv, 'bin', 'python');
     return [fs.existsSync(py) ? py : (IS_WIN ? 'python' : 'python3'), [script]];
@@ -102,12 +117,29 @@ const engine = {
     }, 60000);
   },
 
+  // On Windows, killing the engine doesn't stop what it started (rclone,
+  // ffmpeg, yt-dlp). Left running, they hold files in Dwn's install folder
+  // open and an update can't replace them, so end the whole process tree.
   stop() {
     this.stopping = true;
-    if (this.proc) {
-      try { this.proc.stdin.end(); } catch {}
-      this.proc.kill();
+    const p = this.proc;
+    if (!p) return;
+    try { p.stdin.end(); } catch {}
+    if (IS_WIN && p.pid) {
+      try { spawnSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }); } catch {}
     }
+    p.kill();
+  },
+
+  // Stop and wait (up to a few seconds) until the engine has really exited.
+  stopAndWait(ms = 5000) {
+    const p = this.proc;
+    if (!p) return Promise.resolve();
+    return new Promise((resolve) => {
+      const t = setTimeout(resolve, ms);
+      p.once('exit', () => { clearTimeout(t); resolve(); });
+      this.stop();
+    });
   },
 
   restart() {
@@ -252,6 +284,137 @@ function togglePanel() {
   else showPanel();
 }
 
+// "Download complete" panel: a small always-on-top window in a screen corner
+// when a download finishes while Dwn isn't in front. It never takes focus, and
+// each finished file in it can be dragged straight into another app.
+const DONE_W = 384;
+const DONE_MARGIN = 16;
+let doneItems = [];            // newest first
+let doneHeight = 120;
+let doneShowPending = false;
+const doneIcons = new Map();   // file -> nativeImage, for dragging
+
+function createDonePanel() {
+  doneWin = new BrowserWindow({
+    width: DONE_W,
+    height: doneHeight,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    fullscreenable: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: webPrefs,
+  });
+  doneWin.setAlwaysOnTop(true, 'floating');
+  doneWin.loadFile(path.join(__dirname, 'ui', 'done.html'));
+  doneWin.webContents.once('did-finish-load', () => { doneLoaded = true; sendDone(); });
+  doneWin.on('closed', () => { doneWin = null; doneLoaded = false; });
+}
+
+function placeDone() {
+  if (!doneWin) return;
+  const corner = settings.get('donePanel') || 'bottom-right';
+  const wa = screen.getPrimaryDisplay().workArea;
+  const h = Math.min(Math.round(doneHeight), wa.height - DONE_MARGIN * 2);
+  const x = corner.endsWith('left') ? wa.x + DONE_MARGIN : wa.x + wa.width - DONE_W - DONE_MARGIN;
+  const y = corner.startsWith('top') ? wa.y + DONE_MARGIN : wa.y + wa.height - h - DONE_MARGIN;
+  doneWin.setBounds({ x: Math.round(x), y: Math.round(y), width: DONE_W, height: h });
+}
+
+let doneLoaded = false;
+function sendDone() {
+  if (doneWin && doneLoaded) doneWin.webContents.send('done:items', doneItems);
+}
+
+function hideDone() {
+  doneItems = [];
+  doneShowPending = false;
+  if (doneWin && doneWin.isVisible()) doneWin.hide();
+}
+
+async function fileIcon(file) {
+  // The shell's icon for the file. Windows only: on macOS 27, Electron 33's
+  // getFileIcon crashes the app (a NOTREACHED check in Chromium).
+  if (!IS_WIN) return null;
+  try {
+    const img = await app.getFileIcon(file, { size: 'large' });
+    if (!img.isEmpty()) return img;
+  } catch {}
+  return null;
+}
+
+async function showDone(item) {
+  const corner = settings.get('donePanel');
+  if (!corner || corner === 'off') return false;
+  const file = item.file;
+  let st = null;
+  try { st = fs.statSync(file); } catch { return false; }
+  const entry = {
+    id: crypto.randomBytes(6).toString('hex'),
+    file,
+    name: path.basename(file),
+    title: item.title || path.basename(file),
+    thumbnail: /^https:\/\//.test(item.thumbnail || '') ? item.thumbnail : null,
+    size: item.size || (st.isDirectory() ? null : st.size),
+    files: item.files || null,
+    is_dir: st.isDirectory(),
+    cloud: !!item.cloud,
+    icon: null,
+  };
+  const img = await fileIcon(file);
+  if (img) { doneIcons.set(file, img); entry.icon = img.toDataURL(); }
+  doneItems = [entry, ...doneItems.filter((d) => d.file !== file)].slice(0, 4);
+  if (!doneWin) createDonePanel();
+  else sendDone();
+  // Shown once the panel has measured itself (done:size), so it never flashes at the wrong size.
+  doneShowPending = true;
+  return true;
+}
+
+ipcMain.handle('done:size', (_e, h) => {
+  doneHeight = Math.max(60, Number(h) || 120);
+  if (!doneWin) return;
+  placeDone();
+  if (doneShowPending && doneItems.length) {
+    doneShowPending = false;
+    if (!doneWin.isVisible()) doneWin.showInactive();
+  }
+});
+ipcMain.handle('done:hide', () => hideDone());
+ipcMain.handle('done:remove', (_e, id) => {
+  doneItems = doneItems.filter((d) => d.id !== id);
+  if (!doneItems.length) hideDone(); else sendDone();
+});
+ipcMain.on('done:drag', (e, file) => {
+  if (!doneItems.some((d) => d.file === file) || !fs.existsSync(file)) return;
+  let icon = doneIcons.get(file);
+  if (!icon || icon.isEmpty()) {
+    for (const n of ['icon.png', 'tray-white@2x.png', 'tray-white.png']) {
+      icon = nativeImage.createFromPath(path.join(RES, n));
+      if (!icon.isEmpty()) break;
+    }
+  }
+  e.sender.startDrag({ file, icon });
+});
+
+// A link or cloud download finished. With Dwn's window in front, the list
+// already shows it. Otherwise show the panel, or (panel off) a notification.
+ipcMain.handle('download:finished', async (_e, item) => {
+  const inFront = mainWin && !mainWin.isDestroyed() && mainWin.isVisible() && mainWin.isFocused();
+  if (inFront) return { shown: null };
+  if (item.direction !== 'up' && item.file && await showDone(item)) return { shown: 'panel' };
+  const title = item.direction === 'up' ? 'Uploaded' : item.cloud ? 'Downloaded from the cloud' : 'Downloaded';
+  notify(title, item.title || path.basename(item.file || ''), item.file && item.direction !== 'up' ? () => shell.showItemInFolder(item.file) : undefined);
+  return { shown: 'notification' };
+});
+
 // ---------------------------------------------------------------- tray, shortcut, links
 
 // The "dwn↓" wordmark, white on a dark taskbar and black on a light one.
@@ -368,6 +531,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
   if ('trayEnabled' in patch) applyTray();
   if ('autoInstallUpdates' in patch) updater.check(false);
   if ('launchAtLogin' in patch) app.setLoginItemSettings({ openAtLogin: !!patch.launchAtLogin, args: ['--hidden'] });
+  if ('donePanel' in patch) { if (patch.donePanel === 'off') hideDone(); else placeDone(); }
   let shortcut = { ok: true };
   if ('shortcut' in patch || 'hotkeyEnabled' in patch) shortcut = applyShortcut();
   broadcast('settings', settings.all());
@@ -409,9 +573,9 @@ ipcMain.handle('fs:free', (_e, p) => {
   } catch { return null; }
 });
 
-ipcMain.handle('dialog:folder', async (_e, current) => {
+ipcMain.handle('dialog:folder', async (_e, current, title) => {
   const r = await dialog.showOpenDialog(mainWin, {
-    title: 'Choose where Dwn saves downloads', defaultPath: current, properties: ['openDirectory', 'createDirectory'],
+    title: title || 'Choose where Dwn saves downloads', defaultPath: current, properties: ['openDirectory', 'createDirectory'],
   });
   return r.canceled ? null : r.filePaths[0];
 });
@@ -437,6 +601,50 @@ ipcMain.handle('oembed', async (_e, url) => {
 
 ipcMain.handle('notify', (_e, title, body, file) => {
   notify(title, body, file ? () => shell.showItemInFolder(file) : undefined);
+});
+
+// ---------------------------------------------------------------- cloud tab helpers
+
+// One folder on this computer, for the Cloud tab's "This PC" pane.
+const SKIP_NAMES = new Set(['desktop.ini', 'thumbs.db', '$recycle.bin', 'system volume information', '$windows.~bt', 'pagefile.sys', 'hiberfil.sys', 'swapfile.sys', 'dumpstack.log.tmp']);
+ipcMain.handle('fs:list', (_e, dir) => {
+  try {
+    dir = path.resolve(dir || app.getPath('downloads'));
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const items = [];
+    for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (d.name.startsWith('.') || SKIP_NAMES.has(d.name.toLowerCase())) continue;
+      const full = path.join(dir, d.name);
+      let st = null;
+      try { st = fs.statSync(full); } catch { continue; }
+      items.push({ name: d.name, path: full, is_dir: st.isDirectory(), size: st.isDirectory() ? null : st.size, modified: st.mtimeMs });
+      if (items.length >= 5000) break;
+    }
+    items.sort((a, b) => (a.is_dir === b.is_dir ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) : a.is_dir ? -1 : 1));
+    // Clickable steps from the home folder (or the drive) down to this folder.
+    const home = app.getPath('home');
+    const crumbs = [];
+    let cur = dir;
+    for (;;) {
+      if (cur.toLowerCase() === home.toLowerCase()) { crumbs.push({ title: 'Home', path: cur }); break; }
+      const up = path.dirname(cur);
+      if (up === cur) { crumbs.push({ title: IS_WIN ? cur.replace(/\\$/, '') : 'Computer', path: cur }); break; }
+      crumbs.push({ title: path.basename(cur), path: cur });
+      cur = up;
+    }
+    crumbs.reverse();
+    let free = null;
+    try { const sf = fs.statfsSync(dir); free = sf.bavail * sf.bsize; } catch {}
+    const parent = path.dirname(dir);
+    return { path: dir, parent: parent === dir ? null : parent, crumbs, items, free };
+  } catch (e) {
+    return { error: e.code === 'EPERM' || e.code === 'EACCES' ? 'Dwn isn\'t allowed to open that folder.' : `Couldn't open that folder. ${e.message}` };
+  }
+});
+
+// The cloud sign-in page is served by rclone on this computer (http://127.0.0.1:port/auth…).
+ipcMain.handle('cloud:open-auth', (_e, url) => {
+  if (/^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(String(url)) || /^https:\/\//.test(String(url))) shell.openExternal(url);
 });
 
 ipcMain.handle('browsers', () => detectBrowsers());
@@ -498,6 +706,17 @@ app.whenReady().then(() => {
   updater.init({
     onChange: (s) => { broadcast('update', s); },
     notify: (title, body) => notify(title, body, () => { showMain(); broadcast('ui:command', 'update'); }),
+    // Restart to update: let nothing keep Dwn open (the tray's close-to-hide,
+    // window-all-closed) and stop the engine before the installer runs.
+    beforeInstall: async () => {
+      quitting = true;
+      await engine.stopAndWait();
+    },
+    installFailed: () => {
+      quitting = false;
+      engine.stopping = false;
+      if (!engine.proc) engine.start();
+    },
   });
   handleLink(process.argv);
   if (SNAPSHOT) runSnapshots();

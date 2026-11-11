@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Dwn download complete</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    html, body { background: transparent; }
+    #done { display: flex; flex-direction: column; gap: 8px; padding: 0; }
+    .dn { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: rgba(16,16,18,.97);
+      border: 1px solid rgba(255,255,255,.10); border-radius: 16px; animation: dnin .28s cubic-bezier(.3,.9,.3,1); }
+    @keyframes dnin { from { opacity: 0; transform: translateY(8px); } }
+    .dn-head { display: flex; align-items: center; gap: 6px; height: 18px; }
+    .dn-head .ok { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 11.5px; font-weight: 600; }
+    .dn-head .ok .i { width: 13px; height: 13px; stroke-width: 2.6; }
+    .dn-head .x { margin-left: auto; width: 24px; height: 24px; margin-right: -4px; }
+    .dn-file { display: flex; align-items: center; gap: 12px; padding: 4px; margin: -4px; border-radius: 10px; }
+    .dn-file:hover { background: rgba(255,255,255,.045); }
+    .dn-file[draggable="true"] { cursor: grab; }
+    .dn-art { width: 56px; height: 56px; border-radius: 10px; background: rgba(255,255,255,.06); flex: none; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; }
+    .dn-art.wide { width: 80px; height: 45px; border-radius: 8px; }
+    .dn-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dn-art img.icon { width: 36px; height: 36px; object-fit: contain; }
+    .dn-art .i { width: 22px; height: 22px; color: var(--text2); }
+    .dn-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .dn-meta b { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dn-meta span { color: var(--text3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dn-acts { display: flex; gap: 6px; }
+    .dn-acts button { flex: 1; height: 30px; }
+    .dn-acts .btn-primary { font-size: 12.5px; }
+    .hint { color: var(--text3); font-size: 10.5px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="done"></div>
+  <script src="common.js"></script>
+  <script src="done.js"></script>
+</body>
+</html>

@@ -25,7 +25,7 @@
         <div id="composer" class="card composer"></div>
         <button id="bulk-card" class="card bulk-card"></button>
       </div>
-      <footer id="footer"></footer>
+      <footer id="footer" class="footer"></footer>
     </aside>
     <main id="content">
       <div class="topbar drag">
@@ -34,10 +34,23 @@
       </div>
       <div id="list" class="list"></div>
     </main>
+    <aside id="cloud-sidebar" class="hidden">
+      <div class="side-scroll" id="cloud-side"></div>
+      <footer id="cloud-footer" class="footer"></footer>
+    </aside>
+    <main id="cloud-content" class="hidden">
+      <div class="topbar drag">
+        <label class="search nodrag" id="cloud-search"></label>
+        <div class="top-actions nodrag" id="cloud-actions"></div>
+      </div>
+      <div id="cloud-body" class="cloud-body"></div>
+    </main>
+    <div id="section-tabs" class="nodrag"></div>
   </div>
   <div id="drop" class="hidden"><div class="drop-frame"></div><div class="drop-inner"></div></div>
   <script src="common.js"></script>
   <script src="section.js"></script>
   <script src="app.js"></script>
+  <script src="cloud.js"></script>
 </body>
 </html>

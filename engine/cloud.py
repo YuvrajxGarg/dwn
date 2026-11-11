@@ -447,8 +447,7 @@ def list_dir(account: str, view: str, path: str, link: str | None = None) -> dic
     path = path.strip("/")
     # Who shared what: Drive reports each shared item's owner in its metadata.
     want_owner = view == "shared" and not path and fs.startswith(account + ",shared_with_me")
-    opt = {"metadata": True} if want_owner else {}
-    res = _call("operations/list", {"fs": fs, "remote": path, "opt": opt})
+    res = (_list_with_owners(fs) if want_owner else None) or _call("operations/list", {"fs": fs, "remote": path})
     items = []
     for e in res.get("list") or []:
         md = e.get("Metadata") or {}
@@ -459,6 +458,26 @@ def list_dir(account: str, view: str, path: str, link: str | None = None) -> dic
                       "owner": owner})
     items.sort(key=lambda i: (not i["is_dir"], (i["name"] or "").lower()))
     return {"fs": fs, "path": path, "items": items}
+
+
+def _list_with_owners(fs: str) -> dict | None:
+    """The top of "Shared with me" with each item's owner.
+
+    Asked through rclone's server (operations/list with metadata), this never
+    returns for some accounts, while the command-line tool lists the same thing
+    in seconds. So it goes through the command line, and the caller falls back
+    to a plain listing (no grouping by person) if that fails or is slow."""
+    try:
+        r = subprocess.run([rclone_path(), "lsjson", fs, "--metadata", f"--config={_ctx['conf']}",
+                            "--low-level-retries=3"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=45, **_hidden())
+        if r.returncode == 0:
+            return {"list": json.loads(r.stdout or "[]")}
+        _log("owner listing failed:", (r.stderr or "").strip()[-300:])
+    except Exception as e:  # noqa: BLE001
+        _log("owner listing failed:", e)
+    return None
 
 
 def about(account: str) -> dict:

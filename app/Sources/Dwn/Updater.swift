@@ -245,11 +245,12 @@ final class Updater: ObservableObject {
         }
     }
 
-    /// Called as Dwn quits for real: install a waiting update without reopening.
+    /// Called as Dwn quits for real: install a waiting update, then reopen
+    /// the new version (unless the Mac itself is logging out or shutting down).
     func installOnQuit() {
         guard autoInstall, isReady, let v = stagedVersion, Self.isNewer(v, than: current),
               FileManager.default.fileExists(atPath: stagedApp.path) else { return }
-        try? launchSwap(relaunch: false)
+        try? launchSwap(relaunch: !systemIsQuitting)
     }
 
     /// A small script that waits for Dwn to exit, swaps in the staged app and optionally reopens it.
@@ -261,15 +262,37 @@ final class Updater: ObservableObject {
         while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
         [ -d "\(stagedApp.path)" ] || exit 1
         rm -rf "\(target.path).old"
-        mv "\(target.path)" "\(target.path).old" && mv "\(stagedApp.path)" "\(target.path)" && rm -rf "\(target.path).old"
+        if mv "\(target.path)" "\(target.path).old"; then
+          if mv "\(stagedApp.path)" "\(target.path)"; then
+            rm -rf "\(target.path).old"
+          else
+            mv "\(target.path).old" "\(target.path)"   # put the old version back
+          fi
+        fi
         defaults delete \(Bundle.main.bundleIdentifier ?? "com.yuvrajgarg.dwn") updateStagedVersion 2>/dev/null
-        \(relaunch ? "open \"\(target.path)\"" : "")
+        \(relaunch ? "sleep 0.5; open \"\(target.path)\" --args --dwn-updated" : "")
         rm -f "$0"
         """.write(to: script, atomically: true, encoding: .utf8)
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = [script.path]
-        try p.run()
+        try spawnDetached("/bin/sh", [script.path])
+    }
+
+    /// Starts a process in its own session. A plain child shares Dwn's process
+    /// group, and macOS ends that whole group when an app opened from Finder or
+    /// the Dock quits, which killed the swap script before it could reopen Dwn.
+    private func spawnDetached(_ exe: String, _ args: [String]) throws {
+        var attr = posix_spawnattr_t(nil as OpaquePointer?)
+        posix_spawnattr_init(&attr)
+        defer { posix_spawnattr_destroy(&attr) }
+        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
+        var files = posix_spawn_file_actions_t(nil as OpaquePointer?)
+        posix_spawn_file_actions_init(&files)
+        defer { posix_spawn_file_actions_destroy(&files) }
+        for fd: Int32 in 0...2 { posix_spawn_file_actions_addopen(&files, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0) }
+        let argv = ([exe] + args).map { strdup($0) } + [nil]
+        defer { argv.forEach { free($0) } }
+        var pid: pid_t = 0
+        let rc = posix_spawn(&pid, exe, &files, &attr, argv, environ)
+        guard rc == 0 else { throw APIError(message: "Couldn't start the update (error \(rc)).") }
     }
 
     /// Downloads with a native URLSession download task: full network speed,

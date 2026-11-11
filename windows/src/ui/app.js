@@ -73,6 +73,44 @@ function showApp() {
   installDrop();
   addEventListener('focus', checkClipboard);
   checkClipboard();
+  mount($('#section-tabs'), tabs([['links', 'Links', 'down'], ['cloud', 'Cloud', 'cloud']], S.settings.section === 'cloud' ? 'cloud' : 'links', setSection, 30));
+  showSection(S.settings.section === 'cloud' ? 'cloud' : 'links');
+  cloudInit();
+}
+
+// "Links | Cloud" at the top of the left column. The content swaps instantly;
+// only the tab pill slides.
+function setSection(sec) {
+  S.settings.section = sec;
+  setSettings({ section: sec });
+  showSection(sec);
+}
+function showSection(sec) {
+  const cloud = sec === 'cloud';
+  for (const id of ['#sidebar', '#content']) $(id).classList.toggle('hidden', cloud);
+  for (const id of ['#cloud-sidebar', '#cloud-content']) $(id).classList.toggle('hidden', !cloud);
+  if (cloud) cloudActivate();
+}
+
+// A link download or a cloud download finished: play the sound, and when
+// Dwn isn't in front, show the "Download complete" panel (or a notification).
+let soundTimer = null;
+let doneAudio = null;
+function playDoneSound() {
+  if (S.settings.doneSound === false) return;
+  clearTimeout(soundTimer);
+  // Several finishing together chime once.
+  soundTimer = setTimeout(() => {
+    try {
+      if (!doneAudio) { doneAudio = new Audio('sounds/done.wav'); doneAudio.volume = 0.7; }
+      doneAudio.currentTime = 0;
+      doneAudio.play().catch(() => {});
+    } catch {}
+  }, 60);
+}
+function downloadFinished(item) {
+  if (item.direction !== 'up') playDoneSound();
+  invoke('download:finished', item);
 }
 
 // ============================================================ engine data
@@ -97,7 +135,7 @@ async function refreshJobs() {
     if (j.state === 'done' && !S.doneSeen.has(j.id)) {
       S.doneSeen.add(j.id);
       newlyDone = true;
-      if (!document.hasFocus()) invoke('notify', 'Downloaded', j.title, j.file);
+      downloadFinished({ title: j.title, file: j.file, thumbnail: j.thumbnail });
       api(`jobs/${j.id}/dismiss`, {}).catch(() => {});
     }
   }
@@ -362,8 +400,12 @@ function openSection(info) {
 // ============================================================ footer, top bar
 
 function renderFooter() {
-  const f = $('#footer');
-  if (!f || $('#app').classList.contains('hidden')) return;
+  if ($('#app').classList.contains('hidden')) return;
+  mount($('#footer'), footerKids());
+  mount($('#cloud-footer'), footerKids());
+}
+
+function footerKids() {
   const u = S.update || {};
   let pill = null;
   if (u.phase === 'available' || u.phase === 'downloading' || u.phase === 'ready') {
@@ -372,10 +414,10 @@ function renderFooter() {
     pill = h('button', { class: 'update-pill', onclick: openUpdate }, icon('down', 'sm'), text);
   }
   const folder = (S.prefs.folder || '').replace(/^\/Users\/[^/]+|^C:\\Users\\[^\\]+/i, '~');
-  mount(f,
+  return [
     h('button', { class: 'row', title: 'Change where files are saved', onclick: chooseFolder }, icon('folder'), h('span', {}, 'Saving to'), h('span', { class: 'path' }, folder)),
     h('div', { class: 'row' }, icon('drive'), [S.free != null ? `${fmtBytes(S.free)} free` : null, S.health ? `yt-dlp ${S.health.ytdlp}` : null].filter(Boolean).join(' · ')),
-    h('div', { class: 'row', style: { marginTop: '2px' } }, wordmark(12, true), h('span', {}, `v${S.version}`), pill));
+    h('div', { class: 'row', style: { marginTop: '2px' } }, wordmark(12, true), h('span', {}, `v${S.version}`), pill)];
 }
 
 async function chooseFolder() {
@@ -509,11 +551,13 @@ function installDrop() {
   const drop = $('#drop');
   mount($('.drop-inner'), arrowSVG(''), 'Drop to download');
   let depth = 0;
-  addEventListener('dragenter', (e) => { e.preventDefault(); depth++; drop.classList.remove('hidden'); });
-  addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; drop.classList.add('hidden'); } });
+  const inCloud = () => S.settings.section === 'cloud';
+  addEventListener('dragenter', (e) => { e.preventDefault(); if (inCloud()) return; depth++; drop.classList.remove('hidden'); });
+  addEventListener('dragleave', () => { if (inCloud()) return; if (--depth <= 0) { depth = 0; drop.classList.add('hidden'); } });
   addEventListener('dragover', (e) => e.preventDefault());
   addEventListener('drop', async (e) => {
     e.preventDefault(); depth = 0; drop.classList.add('hidden');
+    if (inCloud()) return;
     const dt = e.dataTransfer;
     if (dt.files && dt.files.length) {
       const f = dt.files[0];
@@ -705,6 +749,11 @@ function openSettings(page = 'general') {
       h('div', { class: 'group' },
         kv('Save downloads to', h('button', { class: 'btn-quiet', onclick: async () => { await chooseFolder(); go('general'); } }, (S.prefs.folder || '').split(/[\\/]/).pop() || 'Choose…')),
         kv('Downloads at once', select([1, 2, 3, 4, 5, 6, 8].map((n) => [n, String(n)]), S.prefs.concurrency || 3, (v) => setPrefs({ concurrency: Number(v) })))),
+      h('h3', {}, 'When a download finishes'),
+      h('div', { class: 'group' },
+        optionRow('bell', 'Play a sound when a download finishes', S.settings.doneSound !== false, (v) => { setSettings({ doneSound: v }); if (v) { S.settings.doneSound = true; playDoneSound(); } }),
+        kv('Download-finished panel', select(DONE_PANEL_SPOTS, S.settings.donePanel || 'bottom-right', (v) => setSettings({ donePanel: v }).then(() => go('general'))))),
+      h('div', { class: 'note' }, `When Dwn isn't in front, a small panel shows the finished file. Drag it straight into another app, or open it.${S.settings.donePanel === 'off' ? ' With the panel off, you get a notification instead.' : ''}`),
       h('h3', {}, 'YouTube sign-in'), signInPanel(),
       S.prefs.browser_cookies ? h('button', { class: 'btn-link', style: { alignSelf: 'flex-start' }, onclick: () => { setPrefs({ browser_cookies: '' }); renderOptions(); go('general'); } }, 'Stop using browser logins') : null,
       h('button', { class: 'btn-link', style: { alignSelf: 'flex-start' }, onclick: async () => { await setSettings({ onboarded: false }); location.reload(); } }, 'Show the welcome tour again')],
@@ -769,6 +818,8 @@ function openSettings(page = 'general') {
   go(page);
 }
 
+const DONE_PANEL_SPOTS = [['off', 'Off'], ['bottom-right', 'Bottom right'], ['top-right', 'Top right'], ['bottom-left', 'Bottom left'], ['top-left', 'Top left']];
+
 function radioList(list, value, onPick) {
   return h('div', { class: 'radio-list card' }, list.map(([id, name, note]) =>
     h('button', { class: id === value ? 'on' : '', onclick: () => onPick(id) }, h('span', { class: 'dot' }), h('span', {}, h('b', {}, name), h('span', {}, note)))));
@@ -815,7 +866,7 @@ function shortcutRecorder() {
 function showWelcome() {
   const root = $('#welcome');
   root.classList.remove('hidden');
-  const steps = ['welcome', 'formats', 'folder', 'signin', 'shortcuts', 'done'];
+  const steps = ['welcome', 'formats', 'folder', 'signin', 'shortcuts', 'cloud', 'done'];
   let step = 0;
   function render() {
     const dots = h('div', { class: 'dots', style: { visibility: step ? 'visible' : 'hidden' } },
@@ -862,6 +913,9 @@ function showWelcome() {
           h('span', { class: `switch${S.settings.trayEnabled !== false ? ' on' : ''}`, onclick: (e) => { e.target.classList.toggle('on'); setSettings({ trayEnabled: e.target.classList.contains('on') }); } })),
         h('div', { class: 'card setting-card' }, icon('bookmark', 'lg'), h('div', { class: 't' }, h('b', {}, 'Send to Dwn bookmarklet'), h('span', {}, 'Paste it as a bookmark\'s address, then click it on any video page.')),
           h('button', { class: 'btn-quiet', onclick: () => { invoke('clipboard:write', "javascript:location.href='dwn://download?url='+encodeURIComponent(location.href)"); toast('Copied. Make a new bookmark and paste it as the address.'); } }, 'Copy')))),
+    cloud: () => h('div', { class: 'page' }, title('Whole folders from Google Drive and Dropbox',
+      `Connect an account in the Cloud tab to browse your files and everything shared with you, sorted by the person who shared it. Drag a folder to your ${IS_MAC() ? 'Mac' : 'PC'} and it downloads file by file, never as split 2 GB zips.`),
+      tourCloudPreview()),
     done: () => h('div', { class: 'page center' }, h('div', { class: 'logomark', style: { width: '84px', height: '84px', borderRadius: '24px' } }, arrowSVG('')),
       h('h1', { style: { marginTop: '22px' } }, 'You\'re all set'),
       h('p', { class: 'muted', style: { fontSize: '14px' } }, `Paste a link, drop one anywhere in the window, or press ${shortcutLabel()} in any app.`),

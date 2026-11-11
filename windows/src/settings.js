@@ -16,6 +16,11 @@ const DEFAULTS = {
   autoCheckUpdates: true,
   autoInstallUpdates: true,   // download in the background, install on quit
   notifiedVersion: '',
+  section: 'links',            // links | cloud (the switch at the top of the window)
+  cloudLocalFolder: '',        // the This PC pane's folder ('' = the download folder)
+  cloudLinks: [],              // Drive folder links kept in the Cloud sidebar: {account, link, title}
+  doneSound: true,             // play a sound when a download finishes
+  donePanel: 'bottom-right',   // off | bottom-right | top-right | bottom-left | top-left
 };
 
 let file = null;

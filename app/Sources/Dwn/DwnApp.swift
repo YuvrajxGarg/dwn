@@ -37,6 +37,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
         }
         UNUserNotificationCenter.current().delegate = self
+        // Reopened by the updater: bring the window forward and say so, even if
+        // Dwn was running in the background (menu bar only) before the update.
+        if CommandLine.arguments.contains("--dwn-updated") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                MainActor.assumeIsolated {
+                    guard let m = AppModel.current else { return }
+                    m.showMainWindow()
+                    m.toast("Dwn updated to version \(m.updater.current).")
+                }
+            }
+        }
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleQuit(_:withReply:)),
                                                      forEventClass: AEEventClass(kCoreEventClass),
                                                      andEventID: AEEventID(kAEQuitApplication))
@@ -63,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // A plain Quit (from the Dock, say) keeps Dwn running in the menu bar.
         let reason = event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
             ?? event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+        if reason != nil { MainActor.assumeIsolated { systemIsQuitting = true } }
         MainActor.assumeIsolated { quitDwn(force: reason != nil) }
     }
 
@@ -147,6 +159,10 @@ struct DwnApp: App {
 
 /// Set when macOS opened Dwn as a login item.
 @MainActor var launchedAtLogin = false
+
+/// Set when the Mac is logging out, restarting or shutting down. A waiting
+/// update still installs then, but Dwn doesn't reopen.
+@MainActor var systemIsQuitting = false
 
 /// Close every sheet through the model (AppKit cancels quitting while a sheet is
 /// attached, and SwiftUI keeps its sheets attached until its state says closed).
