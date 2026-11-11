@@ -14,3 +14,6 @@ dist/
 # Windows app
 windows/node_modules/
 windows/release/
+
+# local secrets (Google sign-in app for the Cloud tab)
+.env

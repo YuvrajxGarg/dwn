@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — Dwn</title>
+<meta name="description" content="How Dwn handles your data: everything stays on your computer.">
+<meta name="theme-color" content="#0b0b0c">
+<link rel="canonical" href="https://dwn.pxlvzn.in/privacy">
+<link rel="icon" type="image/png" href="/assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header class="nav scrolled">
+  <div class="wrap">
+    <a href="/" class="wordmark" aria-label="Dwn home">dwn<svg viewBox="0 0 36 56"><path d="M11.88 25.76V6.12a6.12 6.12 0 0 1 12.24 0v19.64H36L18 56 0 25.76z"/></svg></a>
+    <div class="nav-right"><a class="btn btn-primary btn-sm" href="/#download">Download</a></div>
+  </div>
+</header>
+<main class="doc">
+  <div class="wrap">
+    <a class="back" href="/"><svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></svg>Back to Dwn</a>
+    <article class="prose">
+      <h1>Dwn privacy policy</h1>
+      <p><em>Last updated: 11 November 2026</em></p>
+      <p>Dwn (<a href="https://dwn.pxlvzn.in">dwn.pxlvzn.in</a>) is a desktop app for macOS and Windows that downloads videos, music and files. It runs entirely on your computer. Dwn has no servers and no accounts of its own, and its developer never receives your files, your sign-ins or anything about how you use it.</p>
+      <h2>Google Drive, Dropbox and other cloud accounts</h2>
+      <p>When you connect a cloud account in Dwn&#x27;s Cloud tab, you sign in on the provider&#x27;s own page (for example Google&#x27;s) and grant Dwn access to your files.</p>
+      <ul><li><strong>What Dwn accesses:</strong> the list of your files and folders, the files shared with you (including who shared them), your storage usage and your account&#x27;s email address. With Google Drive, Dwn asks for access to your Drive files so it can list, download and upload them.</li><li><strong>What Dwn does with it:</strong> only what you ask. It shows your files in the app, downloads the files and folders you choose to your computer, uploads the files you choose, and creates or deletes folders and files when you tell it to.</li><li><strong>Where it&#x27;s stored:</strong> the sign-in token is saved on your computer, in Dwn&#x27;s settings folder (<code>~/Library/Application Support/Dwn</code> on macOS, <code>%APPDATA%\Dwn</code> on Windows). Downloaded files go to the folder you choose. Nothing is sent to the developer or to any other party.</li><li><strong>Who Dwn talks to:</strong> only the provider you signed in to (for example Google&#x27;s Drive API), directly from your computer, using the open-source <a href="https://rclone.org">rclone</a> tool bundled with Dwn.</li><li><strong>No sharing, selling or advertising:</strong> Dwn doesn&#x27;t transfer your data to anyone, use it for advertising, or use it to train AI models.</li></ul>
+      <p>Dwn&#x27;s use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+      <h3>Removing access</h3>
+      <p>Choose <strong>Remove Account</strong> from the account&#x27;s ••• menu in Dwn to delete its sign-in from your computer. You can also revoke Dwn&#x27;s access at any time from your Google account at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> (or your Dropbox, OneDrive, Box or pCloud account settings).</p>
+      <h2>Other network use</h2>
+      <p>To do its job, Dwn also connects to:</p>
+      <ul><li>the websites you download from (YouTube, for example), using the links you give it;</li><li>GitHub, to check for and download Dwn updates;</li><li>PyPI, to check for and download updates to yt-dlp, its download library.</li></ul>
+      <p>If you turn on &quot;Use browser logins&quot;, Dwn reads that browser&#x27;s cookies on your computer to download from sites that need you to be signed in. They&#x27;re used only for those downloads and never leave your computer except in requests to those sites.</p>
+      <h2>Analytics</h2>
+      <p>Dwn has no analytics, tracking or crash reporting.</p>
+      <h2>Contact</h2>
+      <p>Questions or requests: open an issue at <a href="https://github.com/YuvrajxGarg/dwn/issues">github.com/YuvrajxGarg/dwn/issues</a>.</p>
+    </article>
+  </div>
+</main>
+<footer>
+  <div class="wrap">
+    <a href="/" class="wordmark" aria-label="Dwn home">dwn<svg viewBox="0 0 36 56"><path d="M11.88 25.76V6.12a6.12 6.12 0 0 1 12.24 0v19.64H36L18 56 0 25.76z"/></svg></a>
+    <nav aria-label="Footer"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/YuvrajxGarg/dwn">GitHub</a><a href="https://github.com/YuvrajxGarg/dwn/issues">Support</a></nav>
+    <div class="fine"><span>© 2026 Yuvraj Garg. MIT licensed.</span></div>
+  </div>
+</footer>
+</body>
+</html>
