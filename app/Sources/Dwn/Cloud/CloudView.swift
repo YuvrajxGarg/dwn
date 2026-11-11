@@ -935,7 +935,13 @@ private struct ServiceButton: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 ServiceIcon(type: service.type, size: 26)
-                Text(service.name).font(.ui(13, .semibold)).foregroundStyle(Theme.text)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(service.name).font(.ui(13, .semibold)).foregroundStyle(Theme.text)
+                    if service.type == "drive" && !GoogleUnverifiedNote.verified {
+                        Text("Expect an “unverified app” notice")
+                            .font(.ui(11)).foregroundStyle(Theme.text3)
+                    }
+                }
                 Spacer()
                 Image(systemName: "arrow.up.right").font(.ui(11, .semibold)).foregroundStyle(Theme.text3)
             }
@@ -945,6 +951,45 @@ private struct ServiceButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+    }
+}
+
+/// What to click on Google's "unverified app" screen. Google is still
+/// reviewing Dwn's sign-in app; set `verified` once it approves Dwn.
+struct GoogleUnverifiedNote: View {
+    static let verified = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "checkmark.shield").font(.ui(15, .semibold)).foregroundStyle(Theme.warn)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Google will say it hasn't verified Dwn").font(.ui(13, .semibold)).foregroundStyle(Theme.text)
+                    Text("Google is still reviewing Dwn. It's safe: Dwn runs only on this Mac and never sends your files or sign-in anywhere.")
+                        .font(.ui(11.5)).foregroundStyle(Theme.text2).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 6) {
+                step(1, "Advanced")
+                step(2, "Go to Dwn (unsafe)")
+                step(3, "Allow")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.warn.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.warn.opacity(0.28)))
+    }
+
+    private func step(_ n: Int, _ label: String) -> some View {
+        HStack(spacing: 6) {
+            Text("\(n)").font(.ui(10.5, .bold)).foregroundStyle(.black)
+                .frame(width: 17, height: 17)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white.opacity(0.92)))
+            Text(label).font(.ui(11.5, .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+        }
+        .padding(.leading, 4).padding(.trailing, 8).frame(height: 25)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.card))
     }
 }
 
@@ -962,10 +1007,7 @@ struct AuthStatus: View {
                     ProgressView().controlSize(.small)
                     Text("Finish signing in in your browser…").font(.ui(12.5)).foregroundStyle(Theme.text2)
                 }
-                if auth.type == "drive" {
-                    Text("If Google says it hasn't verified Dwn, choose Advanced, then Go to Dwn.")
-                        .font(.ui(11.5)).foregroundStyle(Theme.text3).multilineTextAlignment(.center)
-                }
+                if auth.type == "drive" && !GoogleUnverifiedNote.verified { GoogleUnverifiedNote() }
                 HStack(spacing: 8) {
                     if let u = auth.url, let url = URL(string: u) {
                         Button("Open sign-in page again") { NSWorkspace.shared.open(url) }
