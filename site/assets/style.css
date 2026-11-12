@@ -373,3 +373,40 @@ footer .fine a { border-bottom: 1px solid var(--stroke-strong); }
   footer .wrap { grid-template-columns: 1fr; }
   .btn-lg { height: 50px; padding: 0 22px; }
 }
+
+/* =============================================================== type (v2, as on pxlvzn.in)
+   Inter Tight for display (100–900, so weights can contrast: a heavy phrase, then a thin one),
+   Inter for text, JetBrains Mono for small technical labels. The wordmark keeps the heavy system
+   grotesk so it matches the app icons. */
+:root {
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --display: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --brand: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Tight", "Segoe UI", system-ui, sans-serif;
+}
+body { letter-spacing: -0.005em; }
+.wordmark, .pxl-note .pm { font-family: var(--brand); }
+.nav-links { font: 450 14px/1 var(--font); }
+
+.tagline { margin: 0 auto; max-width: 17em; font: 300 clamp(30px, 4.4vw, 54px)/1.08 var(--display); letter-spacing: -0.03em; }
+.tagline .t-thin { font-weight: 200; color: var(--text2); }
+.tagline .t-bold { display: block; font-weight: 750; color: var(--text); }
+.lede { font-weight: 350; }
+
+h2 { font: 750 clamp(34px, 4.8vw, 58px)/1.04 var(--display); letter-spacing: -0.035em; max-width: 20ch; }
+h2 .thin { font-weight: 200; color: var(--text2); }
+.kicker { display: inline-flex; align-items: center; gap: 10px; font: 500 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text3); }
+.kicker::before { content: ""; width: 7px; height: 7px; background: var(--accent); }
+.section-lede { font: 350 18.5px/1.55 var(--font); }
+.card h3 { font: 600 19px/1.25 var(--display); letter-spacing: -0.015em; }
+.card p { font-weight: 380; }
+.btn { font-family: var(--font); font-weight: 600; letter-spacing: -0.01em; }
+.chip { font-family: var(--display); font-weight: 700; letter-spacing: -.01em; }
+.caption { font: 400 12px/1.5 var(--mono); }
+.meta { font-weight: 400; }
+
+.trio .big { font: 200 64px/1 var(--display); letter-spacing: -0.04em; }
+.platform h3 { font: 700 19px/1.2 var(--display); }
+.download-box h2 { font-size: clamp(38px, 5.4vw, 64px); margin-inline: auto; }
+footer .fine { font-family: var(--mono); font-size: 11.5px; }
+.term { font-family: var(--mono); }
