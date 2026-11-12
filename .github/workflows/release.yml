@@ -25,12 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create the release if it doesn't exist
+      # The release stays a draft until both apps are attached, so the updater never
+      # sees a published release that's missing a platform's download.
+      - name: Create the draft release if it doesn't exist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --title "Dwn ${TAG#v}" --generate-notes --verify-tag
+            gh release create "$TAG" --title "Dwn ${TAG#v}" --generate-notes --verify-tag --draft
 
   mac:
     needs: release
@@ -152,3 +154,20 @@ jobs:
         run: |
           cd windows/release
           gh release upload "$TAG" Dwn-Setup-*.exe Dwn-Setup-*.exe.blockmap latest.yml --clobber
+
+  publish:
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish once both apps are attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          assets=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          echo "$assets"
+          for a in Dwn-mac.zip Dwn-mac.zip.sha256 latest.yml; do
+            echo "$assets" | grep -qx "$a" || { echo "missing $a, leaving the release as a draft"; exit 1; }
+          done
+          echo "$assets" | grep -qE '^Dwn-Setup-.*\.exe$' || { echo "missing the Windows installer, leaving the release as a draft"; exit 1; }
+          gh release edit "$TAG" --draft=false --latest
