@@ -88,7 +88,12 @@ struct SplashView: View {
                                 .foregroundStyle(Theme.text)
                                 .opacity(shown[i] ? 1 : 0)
                                 .offset(y: shown[i] ? 0 : size * 0.35)
+                                // Room for the blur: the tight tracking leaves glyphs wider than
+                                // their frames, and the blur is drawn inside the frame. The
+                                // negative padding takes the room back so nothing moves.
+                                .padding(size * 0.2)
                                 .blur(radius: shown[i] ? 0 : 8)
+                                .padding(-size * 0.2)
                         }
                     }
                     DropArrow()

@@ -119,6 +119,10 @@ img { display: block; max-width: 100%; height: auto; }
 .ready .hero-mark .ch:nth-child(2) { animation-delay: 0.09s; }
 .ready .hero-mark .ch:nth-child(3) { animation-delay: 0.18s; }
 .ready .hero-mark svg { transform-origin: bottom; animation: drop 0.62s cubic-bezier(.3, 1.45, .5, 1) 0.42s forwards; }
+/* WebKit clips a blurred element to its own box, and the tight letter-spacing makes each
+   letter's box narrower than its glyph, so the "x" was cut until the blur ended. Pad every
+   side and cancel it with negative margins: room to draw in, and nothing moves. */
+.hero-mark .ch { padding: .1em .2em .3em; margin: -.1em -.2em -.3em; }
 @keyframes rise { from { opacity: 0; transform: translateY(0.35em); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes drop { from { opacity: 0; transform: translateY(-1.1em) scaleY(1.35); } to { opacity: 1; transform: none; } }
 
