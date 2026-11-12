@@ -10,7 +10,7 @@ Get the latest version from **[Releases](https://github.com/YuvrajxGarg/dwn/rele
 
 | Platform | File | Notes |
 |---|---|---|
-| macOS 14+ (Apple silicon) | `Dwn-mac.zip` | Unzip and move **Dwn** to Applications. The app isn't notarized yet: the first time, right-click it → **Open** → **Open**. |
+| macOS 14+ (Apple silicon) | `Dwn.dmg` | Open it and drag **Dwn** to Applications. The app isn't notarized yet: the first time, right-click it → **Open** → **Open**. |
 | Windows 10/11 (64-bit) | `Dwn-Setup-x.y.z.exe` | Run the installer. If SmartScreen appears, click **More info** → **Run anyway**. |
 
 Dwn checks this repository's releases for updates, notifies you when a new version is out, and installs it with one click.

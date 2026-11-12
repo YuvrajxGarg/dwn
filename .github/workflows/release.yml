@@ -1,7 +1,8 @@
 # Builds Dwn for macOS and Windows when a version tag (v1.2.3) is pushed, and
 # attaches the apps to that GitHub release. Both apps check the latest release
 # for updates:
-#   macOS   → Dwn-mac.zip + Dwn-mac.zip.sha256
+#   macOS   → Dwn.dmg (what people download: drag to Applications)
+#             + Dwn-mac.zip + Dwn-mac.zip.sha256 (what installed copies update from)
 #   Windows → Dwn-Setup-<version>.exe + .blockmap + latest.yml (electron-updater)
 name: Release
 
@@ -89,10 +90,12 @@ jobs:
           ID=$(echo "$DWN_SIGN_IDENTITY" | tr 'A-F' 'a-f')
           codesign -dr - dist/Dwn.app 2>&1 | tee /dev/stderr | grep -q "H\"$ID\"" \
             || { echo "Dwn.app is not signed with the Dwn certificate"; exit 1; }
+      - name: Disk image
+        run: installer/build_mac.sh Dwn && installer/test_mac.sh Dwn
       - name: Upload to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/Dwn-mac.zip dist/Dwn-mac.zip.sha256 --clobber
+        run: gh release upload "$TAG" dist/Dwn-mac.zip dist/Dwn-mac.zip.sha256 dist/Dwn.dmg dist/Dwn.dmg.sha256 --clobber
 
   windows:
     needs: release
@@ -166,7 +169,7 @@ jobs:
         run: |
           assets=$(gh release view "$TAG" --json assets -q '.assets[].name')
           echo "$assets"
-          for a in Dwn-mac.zip Dwn-mac.zip.sha256 latest.yml; do
+          for a in Dwn-mac.zip Dwn-mac.zip.sha256 Dwn.dmg latest.yml; do
             echo "$assets" | grep -qx "$a" || { echo "missing $a, leaving the release as a draft"; exit 1; }
           done
           echo "$assets" | grep -qE '^Dwn-Setup-.*\.exe$' || { echo "missing the Windows installer, leaving the release as a draft"; exit 1; }
