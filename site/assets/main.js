@@ -49,10 +49,17 @@
       const notes = $("[data-notes]");
       if (notes && rel.html_url) notes.href = rel.html_url;
       const assets = rel.assets || [];
-      const mac = assets.find((a) => a.name === "Dwn-mac.zip");
+      // The disk image when the release has one, the zip for older releases.
+      const dmg = assets.find((a) => a.name === "Dwn.dmg");
+      const mac = dmg || assets.find((a) => a.name === "Dwn-mac.zip");
       const win = assets.find((a) => /^Dwn-Setup-.*\.exe$/.test(a.name));
       if (mac) {
+        $$('[data-dl="mac"]').forEach((el) => (el.href = mac.browser_download_url));
         $$('[data-size="mac"]').forEach((el) => (el.textContent = size(mac.size)));
+        if (!isWin) main.href = mac.browser_download_url;
+      }
+      if (dmg) {
+        $$('[data-note="mac"]').forEach((el) => (el.innerHTML = "Open it and drag <b>Dwn</b> to Applications. The first time, right-click it and choose <b>Open</b>."));
       }
       if (win) {
         $$('[data-dl="windows"]').forEach((el) => (el.href = win.browser_download_url));
