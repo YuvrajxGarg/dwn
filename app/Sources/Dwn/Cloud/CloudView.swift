@@ -459,7 +459,9 @@ struct LocalPane: View {
             }
             .background(Color.clear.contentShape(Rectangle()).onTapGesture { cloud.localSelection = [] })
             .overlay {
-                if shown.isEmpty {
+                if let err = cloud.localError {
+                    LocalErrorView(error: err) { cloud.refreshLocal() }
+                } else if shown.isEmpty {
                     EmptyPaneText(text: cloud.filter.isEmpty ? "This folder is empty.\nDrag cloud files here to download them."
                                                              : "Nothing matches “\(cloud.filter)”")
                 }
@@ -502,8 +504,9 @@ struct LocalPane: View {
     }
 
     private var freeSpace: String? {
-        let v = try? cloud.localFolder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return v?.volumeAvailableCapacityForImportantUsage.map { formatBytes(Double($0)) + " free" }
+        let v = try? cloud.localFolder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey,
+                                                                .volumeAvailableCapacityKey])
+        return CloudModel.freeSpace(v).map { formatBytes($0) + " free" }
     }
 
     /// The local folder as clickable steps, starting at the home folder when inside it,
@@ -725,6 +728,30 @@ private struct PaneFooter: View {
             Text("Drag to copy").font(.ui(11.5)).foregroundStyle(Theme.text3.opacity(0.7))
         }
         .padding(.horizontal, 14).frame(height: 36)
+    }
+}
+
+/// Shown instead of "This folder is empty" when the folder couldn't be read.
+private struct LocalErrorView: View {
+    var error: LocalReadError
+    var retry: () -> Void
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: error.privacy ? "lock" : "exclamationmark.triangle")
+                .font(.ui(18, .medium)).foregroundStyle(Theme.text3)
+            Text(error.message).font(.ui(12.5)).foregroundStyle(Theme.text2).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                if error.privacy {
+                    Button("Open Privacy Settings") {
+                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")!)
+                    }
+                }
+                Button("Try Again", action: retry)
+            }
+            .controlSize(.small)
+        }
+        .padding(24).frame(maxWidth: 340)
     }
 }
 
