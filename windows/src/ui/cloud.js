@@ -575,6 +575,17 @@ async function chooseLocalFolder() {
   if (p) refreshLocal(p);
 }
 
+// External SSDs and other drives: jump to one to download onto it or upload from it.
+async function chooseDrive(btn) {
+  const drives = await invoke('fs:drives');
+  const r = btn.getBoundingClientRect();
+  if (!drives || !drives.length) { toast('No drives found.', true); return; }
+  popupMenu(r.left, r.bottom + 4, drives.map((d) => ({
+    label: d.free != null ? `${d.name}  ·  ${fmtBytes(d.free)} free` : d.name,
+    run: () => refreshLocal(d.path),
+  })));
+}
+
 const shownLocal = () => {
   const q = CL.filter.trim().toLowerCase();
   return q ? CL.local.items.filter((e) => e.name.toLowerCase().includes(q)) : CL.local.items;
@@ -806,6 +817,7 @@ function renderLocal() {
     h('div', { class: 'pane-top' },
       paneTitle(h('span', { class: 'pc-ic' }, icon('monitor')), pcName(), CL.local.free != null ? `${fmtBytes(CL.local.free)} free` : null),
       h('button', { class: 'btn-icon', title: 'Enclosing folder', disabled: !CL.local.parent, onclick: () => CL.local.parent && refreshLocal(CL.local.parent) }, icon('up')),
+      h('button', { class: 'btn-icon', title: 'Drives', onclick: (e) => chooseDrive(e.currentTarget) }, icon('drive')),
       h('button', { class: 'btn-icon', title: 'Choose folder…', onclick: chooseLocalFolder }, icon('folder'))),
     crumbBar(CL.local.crumbs.map((c) => [c.title, c.path]), (path) => refreshLocal(path)));
   renderLocalList();

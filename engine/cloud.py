@@ -544,6 +544,26 @@ def download(account: str, view: str, items: list[dict], dest: str | None = None
     return out
 
 
+def _split_local(f: str) -> tuple[str, str]:
+    """(folder to copy from, name in the cloud) for a local path.
+
+    A whole drive (``E:\\`` on Windows, ``/`` anywhere) has no parent folder or
+    name, so it's copied from itself and named after its drive letter."""
+    parent = os.path.dirname(f)
+    name = os.path.basename(f.rstrip("\\/"))
+    if parent != f and name:
+        return parent, name
+    drive = os.path.splitdrive(f)[0].rstrip(":")
+    return f, (f"Drive {drive}" if drive else "Computer")
+
+
+# Housekeeping folders every drive has (Windows' Recycle Bin and restore points,
+# macOS's Spotlight index, Trash and the "._" files it leaves on exFAT SSDs).
+# They are never wanted in the cloud, and some can't even be read.
+SKIP_ON_UPLOAD = ["$RECYCLE.BIN/**", "System Volume Information/**", ".Trashes/**", ".Spotlight-V100/**",
+                  ".fseventsd/**", ".TemporaryItems/**", ".DocumentRevisions-V100/**", ".DS_Store", "._*"]
+
+
 def upload(account: str, view: str, folder: str, files: list[str], link: str | None = None) -> list[dict]:
     fs = fs_for(account, view, link)
     folder = folder.strip("/")
@@ -552,9 +572,9 @@ def upload(account: str, view: str, folder: str, files: list[str], link: str | N
         f = os.path.abspath(os.path.expanduser(f))
         if not os.path.exists(f):
             continue
-        name = os.path.basename(f.rstrip(os.sep))
+        src_fs, name = _split_local(f)
         out.append(_new(direction="up", account=account, name=name, is_dir=os.path.isdir(f),
-                        src_fs=os.path.dirname(f), src=name, dst_fs=fs,
+                        src_fs=src_fs, src="" if src_fs == f else name, dst_fs=fs,
                         dst=f"{folder}/{name}" if folder else name, local=f))
     return out
 
@@ -563,7 +583,10 @@ def _start(t: dict):
     if t["is_dir"]:
         src = t["src_fs"] + t["src"] if t["src_fs"].endswith(":") else os.path.join(t["src_fs"], t["src"])
         dst = t["dst_fs"] + t["dst"] if t["dst_fs"].endswith(":") else os.path.join(t["dst_fs"], t["dst"])
-        r = _call("sync/copy", {"srcFs": src, "dstFs": dst, "createEmptySrcDirs": True, "_async": True})
+        params = {"srcFs": src, "dstFs": dst, "createEmptySrcDirs": True, "_async": True}
+        if t["direction"] == "up":
+            params["_filter"] = {"ExcludeRule": SKIP_ON_UPLOAD}
+        r = _call("sync/copy", params)
     else:
         r = _call("operations/copyfile", {"srcFs": t["src_fs"], "srcRemote": t["src"],
                                           "dstFs": t["dst_fs"], "dstRemote": t["dst"], "_async": True})
