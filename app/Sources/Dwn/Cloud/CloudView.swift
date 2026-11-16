@@ -421,6 +421,20 @@ struct LocalPane: View {
                     }
                     .buttonStyle(IconButtonStyle(size: 28)).help("Enclosing Folder")
                     .disabled(cloud.localFolder.path == "/")
+                    Menu {
+                        ForEach(cloud.volumes) { v in
+                            Button {
+                                cloud.localFolder = v.url
+                            } label: {
+                                Label(v.free.map { "\(v.name)  ·  \(formatBytes($0)) free" } ?? v.name,
+                                      systemImage: v.isBoot ? "internaldrive" : "externaldrive")
+                            }
+                        }
+                        Divider()
+                        Button("Choose Folder…") { cloud.chooseLocalFolder() }
+                    } label: { Image(systemName: "externaldrive") }
+                        .menuStyle(.button).buttonStyle(IconButtonStyle(size: 28)).menuIndicator(.hidden)
+                        .fixedSize().help("Drives")
                     Button { cloud.chooseLocalFolder() } label: { Image(systemName: "folder") }
                         .buttonStyle(IconButtonStyle(size: 28)).help("Choose Folder…")
                 }
@@ -492,7 +506,8 @@ struct LocalPane: View {
         return v?.volumeAvailableCapacityForImportantUsage.map { formatBytes(Double($0)) + " free" }
     }
 
-    /// The local folder as clickable steps, starting at the home folder when inside it.
+    /// The local folder as clickable steps, starting at the home folder when inside it,
+    /// or at the drive's name on an external drive.
     private var localCrumbs: [(String, URL)] {
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
         var url = cloud.localFolder.standardizedFileURL
@@ -500,6 +515,7 @@ struct LocalPane: View {
         while true {
             if url.path == home { out.append(("Home", url)); break }
             if url.path == "/" { out.append(("Mac", url)); break }
+            if url.deletingLastPathComponent().path == "/Volumes" { out.append((url.lastPathComponent, url)); break }
             out.append((url.lastPathComponent, url))
             url = url.deletingLastPathComponent().standardizedFileURL
         }

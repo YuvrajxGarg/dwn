@@ -642,6 +642,51 @@ ipcMain.handle('fs:list', (_e, dir) => {
   }
 });
 
+// Every drive plugged in (the built-in disk, external SSDs, USB sticks, network
+// drives), for the "This PC" pane's drive menu.
+function volumeLabel(letter) {
+  return new Promise((resolve) => {
+    const p = spawn('cmd.exe', ['/d', '/c', 'vol', `${letter}:`], { windowsHide: true });
+    let out = '';
+    const timer = setTimeout(() => { p.kill(); resolve(null); }, 2000);
+    p.stdout.on('data', (d) => { out += d; });
+    p.on('error', () => { clearTimeout(timer); resolve(null); });
+    p.on('close', () => {
+      clearTimeout(timer);
+      const m = /Volume in drive \w+ is (.+)/i.exec(out);
+      resolve(m ? m[1].trim() : null);
+    });
+  });
+}
+ipcMain.handle('fs:drives', async () => {
+  const space = (p) => {
+    try { const s = fs.statfsSync(p); return { free: s.bavail * s.bsize, total: s.blocks * s.bsize }; } catch { return null; }
+  };
+  if (IS_WIN) {
+    const out = [];
+    for (const letter of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
+      const root = `${letter}:\\`;
+      const sp = space(root);   // empty card readers and disconnected drives fail here
+      if (!sp) continue;
+      out.push({ letter, path: root, ...sp });
+    }
+    const labels = await Promise.all(out.map((d) => volumeLabel(d.letter)));
+    return out.map((d, i) => ({ ...d, name: `${labels[i] || (d.letter === 'C' ? 'Local Disk' : 'Drive')} (${d.letter}:)` }));
+  }
+  const out = [{ name: process.platform === 'darwin' ? 'Macintosh HD' : 'Computer', path: '/', ...space('/') }];
+  const vols = process.platform === 'darwin' ? '/Volumes' : '/media';
+  let names = [];
+  try { names = fs.readdirSync(vols); } catch {}
+  for (const n of names) {
+    const p = path.join(vols, n);
+    if (n.startsWith('.')) continue;
+    try { if (fs.realpathSync(p) === '/') continue; } catch { continue; }   // the boot disk's alias
+    const sp = space(p);
+    if (sp) out.push({ name: n, path: p, ...sp });
+  }
+  return out;
+});
+
 // The cloud sign-in page is served by rclone on this computer (http://127.0.0.1:port/auth…).
 ipcMain.handle('cloud:open-auth', (_e, url) => {
   if (/^http:\/\/(127\.0\.0\.1|localhost):\d+\//.test(String(url)) || /^https:\/\//.test(String(url))) shell.openExternal(url);

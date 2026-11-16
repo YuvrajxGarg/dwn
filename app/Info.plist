@@ -47,6 +47,10 @@
 	<string>Dwn saves what you download to the folder you chose in Settings.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Dwn saves what you download to a folder in Downloads.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Dwn copies cloud folders to and from the external drives you open in the Cloud tab.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Dwn copies cloud folders to and from the network drives you open in the Cloud tab.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

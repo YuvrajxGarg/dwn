@@ -124,6 +124,15 @@ struct LocalEntry: Identifiable, Hashable {
     var id: String { url.path }
 }
 
+/// A disk plugged into this Mac, for the local pane's drive menu.
+struct LocalVolume: Identifiable, Hashable {
+    var url: URL
+    var name: String
+    var free: Double?
+    var isBoot: Bool
+    var id: String { url.path }
+}
+
 enum CloudDates {
     private static let iso: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
@@ -202,6 +211,8 @@ final class CloudModel: ObservableObject {
         }
     }
     @Published var localEntries: [LocalEntry] = []
+    /// Disks plugged into this Mac (the built-in one, external SSDs, USB sticks), for the drive menu.
+    @Published var volumes: [LocalVolume] = []
     @Published var localSelection = Set<String>()
 
     private var listTask: Task<Void, Never>?
@@ -214,6 +225,13 @@ final class CloudModel: ObservableObject {
         self.app = app
         let saved = UserDefaults.standard.string(forKey: "cloudLocalFolder")
         localFolder = URL(fileURLWithPath: saved ?? app.prefs.folder)
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification, NSWorkspace.didRenameVolumeNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.volumesChanged() }
+            }
+        }
+        refreshVolumes()
     }
 
     var accounts: [CloudAccount] { status?.accounts ?? [] }
@@ -225,8 +243,14 @@ final class CloudModel: ObservableObject {
     /// Called when the Cloud tab appears.
     func activate() {
         if !FileManager.default.fileExists(atPath: localFolder.path) {
-            try? FileManager.default.createDirectory(at: localFolder, withIntermediateDirectories: true)
+            if CloudModel.onUnpluggedVolume(localFolder) {
+                // The last folder was on a drive that isn't plugged in now.
+                localFolder = URL(fileURLWithPath: app.prefs.folder)
+            } else {
+                try? FileManager.default.createDirectory(at: localFolder, withIntermediateDirectories: true)
+            }
         }
+        refreshVolumes()
         refreshLocal()
         Task { await refreshStatus() }
         startPolling()
@@ -624,6 +648,38 @@ final class CloudModel: ObservableObject {
                               date: v?.contentModificationDate)
         }
         .sorted { ($0.isDir ? 0 : 1, $0.name.lowercased()) < ($1.isDir ? 0 : 1, $1.name.lowercased()) }
+    }
+
+    func refreshVolumes() {
+        let keys: [URLResourceKey] = [.volumeLocalizedNameKey, .volumeAvailableCapacityForImportantUsageKey,
+                                      .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
+        let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys,
+                                                         options: [.skipHiddenVolumes]) ?? []
+        volumes = urls.compactMap { u in
+            let v = try? u.resourceValues(forKeys: Set(keys))
+            if v?.volumeIsBrowsable == false { return nil }
+            return LocalVolume(url: u, name: v?.volumeLocalizedName ?? u.lastPathComponent,
+                               free: v?.volumeAvailableCapacityForImportantUsage.map(Double.init),
+                               isBoot: v?.volumeIsRootFileSystem ?? (u.path == "/"))
+        }
+        .sorted { ($0.isBoot ? 0 : 1, $0.name.lowercased()) < ($1.isBoot ? 0 : 1, $1.name.lowercased()) }
+    }
+
+    /// A drive was plugged in or ejected: update the menu, and leave a folder that just went away.
+    private func volumesChanged() {
+        refreshVolumes()
+        if !FileManager.default.fileExists(atPath: localFolder.path) {
+            localFolder = URL(fileURLWithPath: app.prefs.folder)
+        } else {
+            refreshLocal()
+        }
+    }
+
+    /// True for a path on an external drive (under /Volumes) whose drive isn't mounted.
+    static func onUnpluggedVolume(_ url: URL) -> Bool {
+        let parts = url.standardizedFileURL.pathComponents   // ["/", "Volumes", "<drive>", ...]
+        guard parts.count >= 3, parts[1] == "Volumes" else { return false }
+        return !FileManager.default.fileExists(atPath: "/Volumes/" + parts[2])
     }
 
     func chooseLocalFolder() {
