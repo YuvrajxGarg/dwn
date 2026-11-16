@@ -124,6 +124,11 @@ struct LocalEntry: Identifiable, Hashable {
     var id: String { url.path }
 }
 
+struct LocalReadError: Equatable {
+    var message: String
+    var privacy: Bool
+}
+
 /// A disk plugged into this Mac, for the local pane's drive menu.
 struct LocalVolume: Identifiable, Hashable {
     var url: URL
@@ -211,6 +216,8 @@ final class CloudModel: ObservableObject {
         }
     }
     @Published var localEntries: [LocalEntry] = []
+    /// Set when the local folder couldn't be read (most often macOS privacy settings blocking a drive).
+    @Published var localError: LocalReadError?
     /// Disks plugged into this Mac (the built-in one, external SSDs, USB sticks), for the drive menu.
     @Published var volumes: [LocalVolume] = []
     @Published var localSelection = Set<String>()
@@ -232,6 +239,10 @@ final class CloudModel: ObservableObject {
             }
         }
         refreshVolumes()
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.localError != nil { self?.refreshLocal() } }
+        }
     }
 
     var accounts: [CloudAccount] { status?.accounts ?? [] }
@@ -640,8 +651,16 @@ final class CloudModel: ObservableObject {
 
     func refreshLocal() {
         let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .isHiddenKey]
-        let urls = (try? FileManager.default.contentsOfDirectory(at: localFolder, includingPropertiesForKeys: keys,
-                                                                   options: [.skipsHiddenFiles])) ?? []
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(at: localFolder, includingPropertiesForKeys: keys,
+                                                               options: [.skipsHiddenFiles])
+            localError = nil
+        } catch {
+            // Never pass a folder Dwn can't read off as empty: say why, so it can be fixed.
+            urls = []
+            localError = CloudModel.readError(error, at: localFolder)
+        }
         localEntries = urls.map { u in
             let v = try? u.resourceValues(forKeys: Set(keys))
             return LocalEntry(url: u, isDir: v?.isDirectory ?? false, size: v?.fileSize.map(Double.init),
@@ -650,19 +669,44 @@ final class CloudModel: ObservableObject {
         .sorted { ($0.isDir ? 0 : 1, $0.name.lowercased()) < ($1.isDir ? 0 : 1, $1.name.lowercased()) }
     }
 
+    /// Why a local folder couldn't be listed, in words, and whether macOS privacy settings are the cause.
+    static func readError(_ error: Error, at url: URL) -> LocalReadError {
+        let ns = error as NSError
+        let posix = (ns.userInfo[NSUnderlyingErrorKey] as? NSError).flatMap { $0.domain == NSPOSIXErrorDomain ? $0.code : nil }
+        let denied = ns.code == NSFileReadNoPermissionError || posix == Int(EPERM) || posix == Int(EACCES)
+        if denied {
+            let external = url.standardizedFileURL.path.hasPrefix("/Volumes/")
+            return LocalReadError(message: external
+                ? "macOS isn't letting Dwn read this drive. In System Settings → Privacy & Security, turn Dwn on under Files and Folders (Removable Volumes) or Full Disk Access, then come back."
+                : "macOS isn't letting Dwn read this folder. In System Settings → Privacy & Security, turn Dwn on under Files and Folders or Full Disk Access, then come back.",
+                privacy: true)
+        }
+        if ns.code == NSFileReadNoSuchFileError || posix == Int(ENOENT) {
+            return LocalReadError(message: "This folder isn't there anymore. If it's on a drive, plug the drive back in.", privacy: false)
+        }
+        return LocalReadError(message: "Dwn couldn't open this folder. \(ns.localizedDescription)", privacy: false)
+    }
+
     func refreshVolumes() {
         let keys: [URLResourceKey] = [.volumeLocalizedNameKey, .volumeAvailableCapacityForImportantUsageKey,
-                                      .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
+                                      .volumeAvailableCapacityKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
         let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys,
                                                          options: [.skipHiddenVolumes]) ?? []
         volumes = urls.compactMap { u in
             let v = try? u.resourceValues(forKeys: Set(keys))
             if v?.volumeIsBrowsable == false { return nil }
             return LocalVolume(url: u, name: v?.volumeLocalizedName ?? u.lastPathComponent,
-                               free: v?.volumeAvailableCapacityForImportantUsage.map(Double.init),
+                               free: CloudModel.freeSpace(v),
                                isBoot: v?.volumeIsRootFileSystem ?? (u.path == "/"))
         }
         .sorted { ($0.isBoot ? 0 : 1, $0.name.lowercased()) < ($1.isBoot ? 0 : 1, $1.name.lowercased()) }
+    }
+
+    /// Free space on a volume. "For important usage" is the figure Finder shows for the
+    /// startup disk but reads 0 on many external drives, so those use the plain figure.
+    static func freeSpace(_ v: URLResourceValues?) -> Double? {
+        if let n = v?.volumeAvailableCapacityForImportantUsage, n > 0 { return Double(n) }
+        return v?.volumeAvailableCapacity.map(Double.init)
     }
 
     /// A drive was plugged in or ejected: update the menu, and leave a folder that just went away.
